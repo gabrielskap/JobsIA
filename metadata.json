@@ -1,0 +1,5 @@
+{
+  "name": "Jobs IA",
+  "description": "Agente de IA para automação e preenchimento de checklists de Jobs da DIOT (Foco em Transhost).",
+  "requestFramePermissions": []
+}
