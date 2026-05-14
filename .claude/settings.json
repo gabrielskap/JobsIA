@@ -6,7 +6,12 @@
       "Bash(dir c:\\\\GIT\\\\JobsIA /s /b /ad)",
       "Bash(xargs cat)",
       "Bash(npm install *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(git pack-refs *)",
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "PowerShell(if \\(-not $?\\) { \"File not found\" })",
+      "PowerShell(Get-Content \".git\\\\packed-refs\" | ForEach-Object { Write-Host \"[$_]\" })"
     ]
   }
 }
