@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"c:\\\\GIT\\\\JobsIA\" -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | Select-Object FullName | head -100)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\GIT\\\\JobsIA\" -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | Select-Object FullName)",
+      "Bash(dir c:\\\\GIT\\\\JobsIA /s /b /ad)",
+      "Bash(xargs cat)",
+      "Bash(npm install *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

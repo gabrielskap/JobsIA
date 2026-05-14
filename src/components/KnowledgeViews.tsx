@@ -1,51 +1,58 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { Book, Database, FileCode, Server, Plus, Trash2, X, Edit2 } from 'lucide-react';
-import { dictionary as initialDictionary, jobs, norms } from '../data/knowledgeBase';
+import { Book, Database, FileCode, Server, Plus, Trash2, X, Edit2, Loader2 } from 'lucide-react';
+import { norms } from '../data/knowledgeBase';
+import { dictionaryService } from '../services/dictionaryService';
+import { normService } from '../services/normService';
+import { jobService } from '../services/jobService';
+import type { DictionaryTerm, NormRule, JobTypeWithParameters } from '../types/database';
+
+const NORMS_TITLE = norms.title;
 
 export function DictionaryView() {
-  const [dictionary, setDictionary] = useState(() => {
-    const saved = localStorage.getItem('checklist_jobs_dictionary');
-    return saved ? JSON.parse(saved) : initialDictionary;
-  });
+  const [dictionary, setDictionary] = useState<DictionaryTerm[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newTerm, setNewTerm] = useState({ term: '', definition: '', category: 'Conceito' });
 
   useEffect(() => {
-    localStorage.setItem('checklist_jobs_dictionary', JSON.stringify(dictionary));
-  }, [dictionary]);
+    dictionaryService.seedIfEmpty().then(() =>
+      dictionaryService.getAll().then(data => {
+        setDictionary(data);
+        setLoading(false);
+      })
+    );
+  }, []);
 
-  const handleSave = (e: FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
-    if (newTerm.term.trim() && newTerm.definition.trim()) {
-      if (editingIndex !== null) {
-        const newList = [...dictionary];
-        newList[editingIndex] = newTerm;
-        setDictionary(newList);
-        setEditingIndex(null);
-      } else {
-        setDictionary([newTerm, ...dictionary]);
-        setIsAdding(false);
-      }
-      setNewTerm({ term: '', definition: '', category: 'Conceito' });
+    if (!newTerm.term.trim() || !newTerm.definition.trim()) return;
+
+    if (editingId !== null) {
+      const updated = await dictionaryService.update(editingId, newTerm);
+      if (updated) setDictionary(prev => prev.map(d => d.id === editingId ? updated : d));
+      setEditingId(null);
+    } else {
+      const created = await dictionaryService.create(newTerm);
+      if (created) setDictionary(prev => [created, ...prev]);
+      setIsAdding(false);
     }
+    setNewTerm({ term: '', definition: '', category: 'Conceito' });
   };
 
-  const startEdit = (index: number) => {
-    setEditingIndex(index);
-    setNewTerm(dictionary[index]);
+  const startEdit = (item: DictionaryTerm) => {
+    setEditingId(item.id);
+    setNewTerm({ term: item.term, definition: item.definition, category: item.category });
     setIsAdding(false);
   };
 
-  const removeTerm = (index: number) => {
-    if (confirm('Tem certeza que deseja excluir este termo?')) {
-      const newList = [...dictionary];
-      newList.splice(index, 1);
-      setDictionary(newList);
-      if (editingIndex === index) {
-        setEditingIndex(null);
-        setNewTerm({ term: '', definition: '', category: 'Conceito' });
-      }
+  const removeTerm = async (item: DictionaryTerm) => {
+    if (!confirm('Tem certeza que deseja excluir este termo?')) return;
+    const ok = await dictionaryService.remove(item.id);
+    if (ok) setDictionary(prev => prev.filter(d => d.id !== item.id));
+    if (editingId === item.id) {
+      setEditingId(null);
+      setNewTerm({ term: '', definition: '', category: 'Conceito' });
     }
   };
 
@@ -64,12 +71,12 @@ export function DictionaryView() {
         <button
           onClick={() => {
             setIsAdding(!isAdding);
-            setEditingIndex(null);
+            setEditingId(null);
             setNewTerm({ term: '', definition: '', category: 'Conceito' });
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
-            isAdding 
-              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
+            isAdding
+              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
@@ -78,14 +85,14 @@ export function DictionaryView() {
         </button>
       </div>
 
-      {(isAdding || editingIndex !== null) && (
-        <form 
+      {(isAdding || editingId !== null) && (
+        <form
           onSubmit={handleSave}
           className="bg-blue-50/50 p-6 rounded-xl border border-blue-100 shadow-inner animate-in slide-in-from-top-4 duration-300"
         >
           <h3 className="text-blue-800 font-bold mb-4 flex items-center gap-2">
-            {editingIndex !== null ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {editingIndex !== null ? 'Editar Termo' : 'Adicionar Novo Termo'}
+            {editingId !== null ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {editingId !== null ? 'Editar Termo' : 'Adicionar Novo Termo'}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="space-y-1.5">
@@ -131,13 +138,13 @@ export function DictionaryView() {
               type="submit"
               className="flex-1 bg-blue-600 text-white font-semibold py-2.5 rounded-lg hover:bg-blue-700 transition-colors shadow-md shadow-blue-600/20"
             >
-              {editingIndex !== null ? 'Salvar Alterações' : 'Salvar Termo no Dicionário'}
+              {editingId !== null ? 'Salvar Alterações' : 'Salvar Termo no Dicionário'}
             </button>
-            {editingIndex !== null && (
+            {editingId !== null && (
               <button
                 type="button"
                 onClick={() => {
-                  setEditingIndex(null);
+                  setEditingId(null);
                   setNewTerm({ term: '', definition: '', category: 'Conceito' });
                 }}
                 className="px-6 bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg hover:bg-slate-300 transition-colors"
@@ -149,81 +156,91 @@ export function DictionaryView() {
         </form>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {dictionary.map((item: any, idx: number) => (
-          <div key={idx} className={`bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition-all group relative ${editingIndex === idx ? 'ring-2 ring-blue-500 border-transparent bg-blue-50/10' : 'border-slate-200'}`}>
-            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-              <button
-                onClick={() => startEdit(idx)}
-                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                title="Editar termo"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => removeTerm(idx)}
-                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                title="Remover termo"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" /> Carregando dicionário...
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {dictionary.map((item) => (
+            <div
+              key={item.id}
+              className={`bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition-all group relative ${
+                editingId === item.id ? 'ring-2 ring-blue-500 border-transparent bg-blue-50/10' : 'border-slate-200'
+              }`}
+            >
+              <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                <button
+                  onClick={() => startEdit(item)}
+                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                  title="Editar termo"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => removeTerm(item)}
+                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                  title="Remover termo"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex justify-between items-start mb-2 pr-12">
+                <h3 className="font-bold text-slate-800 text-lg">{item.term}</h3>
+                <span className="bg-blue-50 text-blue-700 text-[10px] px-2 py-1 rounded-full font-bold border border-blue-100 uppercase tracking-wider">
+                  {item.category}
+                </span>
+              </div>
+              <p className="text-slate-600 text-sm leading-relaxed">{item.definition}</p>
             </div>
-            <div className="flex justify-between items-start mb-2 pr-12">
-              <h3 className="font-bold text-slate-800 text-lg">{item.term}</h3>
-              <span className="bg-blue-50 text-blue-700 text-[10px] px-2 py-1 rounded-full font-bold border border-blue-100 uppercase tracking-wider">
-                {item.category}
-              </span>
-            </div>
-            <p className="text-slate-600 text-sm leading-relaxed">{item.definition}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 export function NormsView() {
-  const [normsData, setNormsData] = useState(() => {
-    const saved = localStorage.getItem('checklist_jobs_norms');
-    return saved ? JSON.parse(saved) : norms;
-  });
-  
+  const [rules, setRules] = useState<NormRule[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ environment: '', rule: '' });
 
   useEffect(() => {
-    localStorage.setItem('checklist_jobs_norms', JSON.stringify(normsData));
-  }, [normsData]);
+    normService.seedIfEmpty().then(() =>
+      normService.getAll().then(data => {
+        setRules(data);
+        setLoading(false);
+      })
+    );
+  }, []);
 
-  const handleSave = (e: FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     if (!formData.environment.trim() || !formData.rule.trim()) return;
 
-    if (editingIndex !== null) {
-      const updatedRules = [...normsData.rules];
-      updatedRules[editingIndex] = formData;
-      setNormsData({ ...normsData, rules: updatedRules });
-      setEditingIndex(null);
+    if (editingId !== null) {
+      const updated = await normService.update(editingId, formData);
+      if (updated) setRules(prev => prev.map(r => r.id === editingId ? updated : r));
+      setEditingId(null);
     } else {
-      setNormsData({
-        ...normsData,
-        rules: [...normsData.rules, formData]
-      });
+      const created = await normService.create(formData);
+      if (created) setRules(prev => [...prev, created]);
       setIsAdding(false);
     }
     setFormData({ environment: '', rule: '' });
   };
 
-  const startEdit = (index: number) => {
-    setEditingIndex(index);
-    setFormData(normsData.rules[index]);
+  const startEdit = (rule: NormRule) => {
+    setEditingId(rule.id);
+    setFormData({ environment: rule.environment, rule: rule.rule });
     setIsAdding(false);
   };
 
-  const removeRule = (index: number) => {
-    const updatedRules = normsData.rules.filter((_: any, i: number) => i !== index);
-    setNormsData({ ...normsData, rules: updatedRules });
+  const removeRule = async (id: string) => {
+    const ok = await normService.remove(id);
+    if (ok) setRules(prev => prev.filter(r => r.id !== id));
   };
 
   return (
@@ -235,18 +252,18 @@ export function NormsView() {
             Regras de Nomenclatura
           </h2>
           <p className="text-slate-600 mt-1">
-            {normsData.title} - Regras que a IA usará para validar as entradas do usuário.
+            {NORMS_TITLE} - Regras que a IA usará para validar as entradas do usuário.
           </p>
         </div>
         <button
           onClick={() => {
             setIsAdding(!isAdding);
-            setEditingIndex(null);
+            setEditingId(null);
             setFormData({ environment: '', rule: '' });
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
-            isAdding 
-              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
+            isAdding
+              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
               : 'bg-emerald-600 text-white hover:bg-emerald-700'
           }`}
         >
@@ -255,14 +272,14 @@ export function NormsView() {
         </button>
       </div>
 
-      {(isAdding || editingIndex !== null) && (
-        <form 
+      {(isAdding || editingId !== null) && (
+        <form
           onSubmit={handleSave}
           className="bg-emerald-50/50 p-6 rounded-xl border border-emerald-100 shadow-inner animate-in slide-in-from-top-4 duration-300"
         >
           <h3 className="text-emerald-800 font-bold mb-4 flex items-center gap-2">
-            {editingIndex !== null ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {editingIndex !== null ? 'Editar Regra' : 'Criar Nova Regra de Nomenclatura'}
+            {editingId !== null ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {editingId !== null ? 'Editar Regra' : 'Criar Nova Regra de Nomenclatura'}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="md:col-span-1 space-y-1.5">
@@ -293,13 +310,13 @@ export function NormsView() {
               type="submit"
               className="flex-1 bg-emerald-600 text-white font-semibold py-2.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20"
             >
-              {editingIndex !== null ? 'Atualizar Regra' : 'Salvar Nova Regra'}
+              {editingId !== null ? 'Atualizar Regra' : 'Salvar Nova Regra'}
             </button>
-            {editingIndex !== null && (
+            {editingId !== null && (
               <button
                 type="button"
                 onClick={() => {
-                  setEditingIndex(null);
+                  setEditingId(null);
                   setFormData({ environment: '', rule: '' });
                 }}
                 className="px-6 bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg hover:bg-slate-300 transition-colors"
@@ -311,123 +328,154 @@ export function NormsView() {
         </form>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="p-4 font-semibold text-slate-700 w-1/4">Ambiente</th>
-              <th className="p-4 font-semibold text-slate-700">Regra de Validação</th>
-              <th className="p-4 font-semibold text-slate-700 w-24 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {normsData.rules.map((rule: any, idx: number) => (
-              <tr key={idx} className={`hover:bg-slate-50 transition-colors group ${editingIndex === idx ? 'bg-emerald-50/30' : ''}`}>
-                <td className="p-4 font-medium text-slate-800">{rule.environment}</td>
-                <td className="p-4 text-slate-600 text-sm">{rule.rule}</td>
-                <td className="p-4 text-right">
-                  <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => startEdit(idx)}
-                      className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                      title="Editar regra"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => removeRule(idx)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                      title="Excluir regra"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" /> Carregando regras...
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="p-4 font-semibold text-slate-700 w-1/4">Ambiente</th>
+                <th className="p-4 font-semibold text-slate-700">Regra de Validação</th>
+                <th className="p-4 font-semibold text-slate-700 w-24 text-right">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {rules.map((rule) => (
+                <tr
+                  key={rule.id}
+                  className={`hover:bg-slate-50 transition-colors group ${editingId === rule.id ? 'bg-emerald-50/30' : ''}`}
+                >
+                  <td className="p-4 font-medium text-slate-800">{rule.environment}</td>
+                  <td className="p-4 text-slate-600 text-sm">{rule.rule}</td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => startEdit(rule)}
+                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                        title="Editar regra"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => removeRule(rule.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                        title="Excluir regra"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
 export function JobsView() {
-  const [jobsData, setJobsData] = useState(() => {
-    const saved = localStorage.getItem('checklist_jobs_list');
-    return saved ? JSON.parse(saved) : jobs;
-  });
-
+  const [jobsData, setJobsData] = useState<JobTypeWithParameters[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     id: '',
     name: '',
     script: '',
     description: '',
-    parameters: [] as { flag: string; name: string; required: boolean; description: string }[]
+    parameters: [] as { flag: string; name: string; required: boolean; description: string }[],
   });
 
   useEffect(() => {
-    localStorage.setItem('checklist_jobs_list', JSON.stringify(jobsData));
-  }, [jobsData]);
+    jobService.seedIfEmpty().then(() =>
+      jobService.getAll().then(data => {
+        setJobsData(data);
+        setLoading(false);
+      })
+    );
+  }, []);
 
-  const handleSave = (e: FormEvent) => {
+  const resetForm = () => {
+    setFormData({ id: '', name: '', script: '', description: '', parameters: [] });
+  };
+
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.id.trim()) return;
 
+    const jobId = Number(formData.id);
+    if (isNaN(jobId)) { alert('ID do Job deve ser um número.'); return; }
+
     if (editingId !== null) {
-      setJobsData(jobsData.map((j: any) => j.id === editingId ? formData : j));
-      setEditingId(null);
-    } else {
-      if (jobsData.some((j: any) => j.id === formData.id)) {
+      if (jobId !== editingId && jobsData.some(j => j.id === jobId)) {
         alert('Já existe um Job com este ID/Tipo.');
         return;
       }
-      setJobsData([...jobsData, formData]);
+      const updated = await jobService.update(
+        editingId,
+        { id: jobId, name: formData.name, script: formData.script, description: formData.description },
+        formData.parameters
+      );
+      if (updated) setJobsData(prev => prev.map(j => j.id === editingId ? updated : j));
+      setEditingId(null);
+    } else {
+      if (jobsData.some(j => j.id === jobId)) {
+        alert('Já existe um Job com este ID/Tipo.');
+        return;
+      }
+      const created = await jobService.create(
+        { id: jobId, name: formData.name, script: formData.script, description: formData.description },
+        formData.parameters
+      );
+      if (created) setJobsData(prev => [...prev, created]);
       setIsAdding(false);
     }
     resetForm();
   };
 
-  const resetForm = () => {
+  const startEdit = (job: JobTypeWithParameters) => {
     setFormData({
-      id: '',
-      name: '',
-      script: '',
-      description: '',
-      parameters: []
+      id: String(job.id),
+      name: job.name,
+      script: job.script,
+      description: job.description,
+      parameters: job.parameters.map(p => ({
+        flag: p.flag,
+        name: p.name,
+        required: p.required,
+        description: p.description,
+      })),
     });
-  };
-
-  const startEdit = (job: any) => {
-    setFormData({ ...job });
     setEditingId(job.id);
     setIsAdding(false);
   };
 
-  const removeJob = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este Tipo de Job?')) {
-      setJobsData(jobsData.filter((j: any) => j.id !== id));
-    }
+  const removeJob = async (id: number) => {
+    if (!confirm('Tem certeza que deseja excluir este Tipo de Job?')) return;
+    const ok = await jobService.remove(id);
+    if (ok) setJobsData(prev => prev.filter(j => j.id !== id));
   };
 
   const addParameter = () => {
     setFormData({
       ...formData,
-      parameters: [...formData.parameters, { flag: '', name: '', required: true, description: '' }]
+      parameters: [...formData.parameters, { flag: '', name: '', required: true, description: '' }],
     });
   };
 
-  const updateParameter = (idx: number, field: string, value: any) => {
+  const updateParameter = (idx: number, field: string, value: string | boolean) => {
     const newParams = [...formData.parameters];
     newParams[idx] = { ...newParams[idx], [field]: value };
     setFormData({ ...formData, parameters: newParams });
   };
 
   const removeParameter = (idx: number) => {
-    const newParams = formData.parameters.filter((_, i) => i !== idx);
-    setFormData({ ...formData, parameters: newParams });
+    setFormData({ ...formData, parameters: formData.parameters.filter((_, i) => i !== idx) });
   };
 
   return (
@@ -449,8 +497,8 @@ export function JobsView() {
             resetForm();
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
-            isAdding 
-              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
+            isAdding
+              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
               : 'bg-purple-600 text-white hover:bg-purple-700'
           }`}
         >
@@ -460,7 +508,7 @@ export function JobsView() {
       </div>
 
       {(isAdding || editingId !== null) && (
-        <form 
+        <form
           onSubmit={handleSave}
           className="bg-purple-50/50 p-6 rounded-xl border border-purple-100 shadow-inner animate-in slide-in-from-top-4 duration-300 space-y-4"
         >
@@ -468,18 +516,17 @@ export function JobsView() {
             {editingId !== null ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             {editingId !== null ? `Editando Tipo ${editingId}` : 'Configurar Novo Tipo de Job'}
           </h3>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Tipo ID</label>
               <input
                 required
-                disabled={editingId !== null}
-                type="text"
+                type="number"
                 value={formData.id}
                 onChange={(e) => setFormData({ ...formData, id: e.target.value })}
                 placeholder="Ex: 1"
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all disabled:bg-slate-100 disabled:cursor-not-allowed"
+                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
               />
             </div>
             <div className="md:col-span-3 space-y-1.5">
@@ -530,10 +577,13 @@ export function JobsView() {
                 <Plus className="w-3 h-3" /> Add Parâmetro
               </button>
             </div>
-            
+
             <div className="space-y-2">
               {formData.parameters.map((param, idx) => (
-                <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col md:flex-row gap-3 items-start animate-in zoom-in-95 duration-200">
+                <div
+                  key={idx}
+                  className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col md:flex-row gap-3 items-start animate-in zoom-in-95 duration-200"
+                >
                   <div className="w-20 shrink-0">
                     <input
                       type="text"
@@ -611,67 +661,73 @@ export function JobsView() {
         </form>
       )}
 
-      <div className="space-y-6">
-        {jobsData.map((job: any) => (
-          <div key={job.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden group">
-            <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-start">
-              <div>
-                <h3 className="font-bold text-slate-800 text-lg">
-                  Tipo {job.id}: {job.name}
-                </h3>
-                <code className="text-xs text-purple-700 bg-purple-50 px-2 py-1 rounded mt-2 inline-block border border-purple-100">
-                  {job.script}
-                </code>
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" /> Carregando jobs...
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {jobsData.map((job) => (
+            <div key={job.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden group">
+              <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-start">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg">
+                    Tipo {job.id}: {job.name}
+                  </h3>
+                  <code className="text-xs text-purple-700 bg-purple-50 px-2 py-1 rounded mt-2 inline-block border border-purple-100">
+                    {job.script}
+                  </code>
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => startEdit(job)}
+                    className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
+                    title="Editar Job"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => removeJob(job.id)}
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    title="Excluir Job"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => startEdit(job)}
-                  className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
-                  title="Editar Job"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => removeJob(job.id)}
-                  className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                  title="Excluir Job"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-slate-600 mb-4">{job.description}</p>
-              <h4 className="font-semibold text-slate-800 text-sm mb-3 flex items-center gap-2">
-                <Database className="w-4 h-4" /> Parâmetros do Script
-              </h4>
-              <div className="grid gap-3">
-                {job.parameters?.map((param: any, idx: number) => (
-                  <div key={idx} className="flex items-start gap-3 text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border shadow-sm">
-                      {param.flag}
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-700">{param.name}</span>
-                        {param.required ? (
-                          <span className="text-[10px] uppercase tracking-wider font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Obrigatório</span>
-                        ) : (
-                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Opcional</span>
-                        )}
+              <div className="p-4">
+                <p className="text-sm text-slate-600 mb-4">{job.description}</p>
+                <h4 className="font-semibold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                  <Database className="w-4 h-4" /> Parâmetros do Script
+                </h4>
+                <div className="grid gap-3">
+                  {job.parameters?.map((param, idx) => (
+                    <div key={idx} className="flex items-start gap-3 text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border shadow-sm">
+                        {param.flag}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-700">{param.name}</span>
+                          {param.required ? (
+                            <span className="text-[10px] uppercase tracking-wider font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Obrigatório</span>
+                          ) : (
+                            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Opcional</span>
+                          )}
+                        </div>
+                        <p className="text-slate-500 mt-1">{param.description}</p>
                       </div>
-                      <p className="text-slate-500 mt-1">{param.description}</p>
                     </div>
-                  </div>
-                ))}
-                {(!job.parameters || job.parameters.length === 0) && (
-                  <div className="text-xs text-slate-400 italic">Sem parâmetros definidos.</div>
-                )}
+                  ))}
+                  {(!job.parameters || job.parameters.length === 0) && (
+                    <div className="text-xs text-slate-400 italic">Sem parâmetros definidos.</div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

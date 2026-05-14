@@ -1,13 +1,46 @@
-import { History, FileText, Download, Search, TrendingUp, CheckCircle, XCircle, Activity } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { History, FileText, Download, Search, TrendingUp, CheckCircle, XCircle, Activity, Loader2 } from 'lucide-react';
+import { checklistService } from '../services/checklistService';
+import type { Checklist } from '../types/database';
+
+const TYPE_LABEL: Record<Checklist['type'], string> = {
+  transhost: 'Transhost (Jobs 3 e 10)',
+  swadm: 'SWADM (Job 1)',
+  java: 'Programa JAVA (Job 9)',
+};
 
 export function HistoryView() {
-  const mockHistory = [
-    { id: 'CHK-1042', type: 'Transhost (Jobs 3 e 10)', file: 'D.CNS.BOE.002', date: '2026-04-01 10:30', status: 'Concluído', user: 'Bruno Mendes' },
-    { id: 'CHK-1041', type: 'Transhost (Jobs 3 e 10)', file: 'D_SCO_ATU_005_BATIMENTO', date: '2026-03-31 15:15', status: 'Concluído', user: 'Edson Nunes' },
-    { id: 'CHK-1040', type: 'SWADM (Job 1)', file: 'P.GEN.PGM.010.SH', date: '2026-03-30 09:45', status: 'Concluído', user: 'Erich Jardim' },
-    { id: 'CHK-1039', type: 'Transhost (Jobs 3 e 10)', file: 'D.HR.FOLHA.001', date: '2026-03-29 14:20', status: 'Falha Validação', user: 'Luiz Benini' },
-    { id: 'CHK-1038', type: 'Programa JAVA (Job 9)', file: 'P.CNS.VRC.001.JAR', date: '2026-03-28 11:10', status: 'Concluído', user: 'Rafael Gratao' },
-  ];
+  const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    checklistService.getAll().then(data => {
+      setChecklists(data);
+      setLoading(false);
+    });
+  }, []);
+
+  const filtered = checklists.filter(item =>
+    !search ||
+    item.file_name?.toLowerCase().includes(search.toLowerCase()) ||
+    TYPE_LABEL[item.type]?.toLowerCase().includes(search.toLowerCase()) ||
+    item.user_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const total = checklists.length;
+  const succeeded = checklists.filter(c => c.status === 'Concluído').length;
+  const failed = checklists.filter(c => c.status === 'Falha Validação').length;
+  const successRate = total > 0 ? ((succeeded / total) * 100).toFixed(1) : '—';
+
+  const typeCounts = checklists.reduce<Record<string, number>>((acc, c) => {
+    acc[c.type] = (acc[c.type] ?? 0) + 1;
+    return acc;
+  }, {});
+  const typeEntries = Object.entries(typeCounts) as [string, number][];
+  const mostCommon = total > 0
+    ? (typeEntries.sort((a, b) => b[1] - a[1])[0]?.[0] ?? null)
+    : null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -23,15 +56,16 @@ export function HistoryView() {
         </div>
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Buscar checklist..." 
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar checklist..."
             className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
           />
         </div>
       </div>
 
-      {/* KPI Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
           <div className="bg-blue-50 p-3 rounded-lg text-blue-600">
@@ -39,7 +73,7 @@ export function HistoryView() {
           </div>
           <div>
             <p className="text-sm text-slate-500 font-medium">Total Gerados</p>
-            <p className="text-2xl font-bold text-slate-800">1.284</p>
+            <p className="text-2xl font-bold text-slate-800">{loading ? '…' : total}</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -48,7 +82,7 @@ export function HistoryView() {
           </div>
           <div>
             <p className="text-sm text-slate-500 font-medium">Taxa de Sucesso</p>
-            <p className="text-2xl font-bold text-slate-800">98,5%</p>
+            <p className="text-2xl font-bold text-slate-800">{loading ? '…' : `${successRate}%`}</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -57,7 +91,7 @@ export function HistoryView() {
           </div>
           <div>
             <p className="text-sm text-slate-500 font-medium">Falhas de Validação</p>
-            <p className="text-2xl font-bold text-slate-800">19</p>
+            <p className="text-2xl font-bold text-slate-800">{loading ? '…' : failed}</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -66,54 +100,69 @@ export function HistoryView() {
           </div>
           <div>
             <p className="text-sm text-slate-500 font-medium">Mais Solicitado</p>
-            <p className="text-lg font-bold text-slate-800 leading-tight">Transhost</p>
+            <p className="text-lg font-bold text-slate-800 leading-tight">
+              {loading ? '…' : mostCommon ? TYPE_LABEL[mostCommon as Checklist['type']]?.split(' ')[0] : '—'}
+            </p>
           </div>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
-              <th className="p-4 font-semibold">ID</th>
-              <th className="p-4 font-semibold">Tipo de Job</th>
-              <th className="p-4 font-semibold">Arquivo/Alvo</th>
-              <th className="p-4 font-semibold">Data</th>
-              <th className="p-4 font-semibold">Solicitante</th>
-              <th className="p-4 font-semibold">Status</th>
-              <th className="p-4 font-semibold text-right">Ação</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 text-sm">
-            {mockHistory.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                <td className="p-4 font-medium text-slate-800">{item.id}</td>
-                <td className="p-4 text-slate-600">{item.type}</td>
-                <td className="p-4 text-slate-600 font-mono text-xs">{item.file}</td>
-                <td className="p-4 text-slate-500">{item.date}</td>
-                <td className="p-4 text-slate-600">{item.user}</td>
-                <td className="p-4">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
-                    item.status === 'Concluído' 
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                      : 'bg-red-50 text-red-700 border-red-200'
-                  }`}>
-                    {item.status}
-                  </span>
-                </td>
-                <td className="p-4 text-right">
-                  <button 
-                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                    title="Baixar PDF"
-                    disabled={item.status !== 'Concluído'}
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                </td>
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" /> Carregando histórico...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+            <FileText className="w-10 h-10 opacity-40" />
+            <p className="text-sm font-medium">
+              {search ? 'Nenhum resultado para a busca.' : 'Nenhum checklist gerado ainda.'}
+            </p>
+          </div>
+        ) : (
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
+                <th className="p-4 font-semibold">Tipo de Job</th>
+                <th className="p-4 font-semibold">Arquivo/Alvo</th>
+                <th className="p-4 font-semibold">Data</th>
+                <th className="p-4 font-semibold">Status</th>
+                <th className="p-4 font-semibold text-right">Ação</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-sm">
+              {filtered.map((item) => (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-4 text-slate-600">{TYPE_LABEL[item.type]}</td>
+                  <td className="p-4 text-slate-600 font-mono text-xs">{item.file_name ?? '—'}</td>
+                  <td className="p-4 text-slate-500">
+                    {new Date(item.created_at).toLocaleString('pt-BR')}
+                  </td>
+                  <td className="p-4">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                        item.status === 'Concluído'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-red-50 text-red-700 border-red-200'
+                      }`}
+                    >
+                      {item.status}
+                    </span>
+                  </td>
+                  <td className="p-4 text-right">
+                    <button
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-40"
+                      title="Baixar PDF"
+                      disabled={item.status !== 'Concluído'}
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
