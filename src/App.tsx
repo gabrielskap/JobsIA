@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import LoginPage from './pages/LoginPage';
 import { Book, Bot, FileCode, History, LogOut, Server, Terminal, Users } from 'lucide-react';
 import { DictionaryView, JobsView, NormsView } from './components/KnowledgeViews';
 import { AgentView } from './components/AgentView';
@@ -123,7 +124,7 @@ export default function App() {
     <Router>
       <AuthProvider>
         <Routes>
-          <Route path="/login" element={<Navigate to="/agente" replace />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/*" element={
             <ProtectedRoute>
               <AppLayout />
