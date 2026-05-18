@@ -16,7 +16,7 @@ export default function SignupPage() {
     setError('');
     setLoading(true);
 
-    const { data, error: signUpError } = await supabase.auth.admin.createUser({
+    const { error: signUpError } = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -27,19 +27,6 @@ export default function SignupPage() {
       setError(signUpError.message);
       setLoading(false);
       return;
-    }
-
-    const userId = data.user?.id;
-    if (userId) {
-      const { error: profileError } = await supabase
-        .from('JobsIA_profiles')
-        .insert({ id: userId, user_id: userId, name, email });
-
-      if (profileError) {
-        setError(profileError.message);
-        setLoading(false);
-        return;
-      }
     }
 
     setLoading(false);
