@@ -4,10 +4,57 @@ import { jsPDF } from 'jspdf';
 import { GoogleGenAI } from "@google/genai";
 import { systemPromptService } from '../services/systemPromptService';
 import { checklistService } from '../services/checklistService';
+import { jobService } from '../services/jobService';
+import { buildCommand } from '../utils/commandBuilder';
+import type { JobTypeWithParameters } from '../types/database';
 
-const DEFAULT_SYSTEM_PROMPT = `Você é o Jobs IA (Hudson Virtual), um Agente de IA especializado em automação e preenchimento de checklists de Jobs da DIOT, com foco em Transhost.
+const BASE_SYSTEM_PROMPT = `Você é o Jobs IA (Hudson Virtual), um Agente de IA especializado em automação e preenchimento de checklists de Jobs da DATAPREV (DIOT).
 Sua missão é guiar o usuário de forma técnica, precisa e amigável na criação de workloads para Unix, Windows e Mainframe.
 Siga as normas N/PD/004/02 rigorosamente. Seja conciso e use termos técnicos da Dataprev.`;
+
+const PROMPT_SUFFIX = `
+## NORMA N/PD/004/02 — NOMENCLATURA DE ARQUIVOS
+- Prefixo padrão obrigatório: 13 caracteres (T d SIS d SUB d 999).
+- Tamanho máximo: 36 caracteres em LETRAS MAIÚSCULAS.
+- Unix/Linux: delimitador OBRIGATÓRIO '.' (ponto).      Ex: D.CNS.BOE.002.20251016
+- Windows:    delimitador OBRIGATÓRIO '_' (underscore). Ex: D_SCO_ATU_005_BATIMENTO
+Valide sempre a nomenclatura antes de gerar o checklist. Alerte o usuário em caso de violação.
+
+## REGRAS DE CONDUTA
+- Ao receber uma solicitação livre, identifique qual Job Tipo se aplica e inicie o fluxo guiado.
+- Sempre confirme cada dado antes de avançar.
+- Ao gerar o comando final, exiba-o em bloco de código com os parâmetros preenchidos.
+- Nunca omita parâmetros obrigatórios; pergunte se não foram fornecidos.`;
+
+function buildPromptFromJobs(jobs: JobTypeWithParameters[]): string {
+  if (jobs.length === 0) return BASE_SYSTEM_PROMPT + PROMPT_SUFFIX;
+
+  const jobsSection = jobs.map(job => {
+    const paramLines = job.parameters.length > 0
+      ? job.parameters.map(p => {
+          const flagPart = (p.flag ?? '—').padEnd(4);
+          const typePart = `[${p.parameter_type}]`.padEnd(12);
+          return `  ${typePart} ${flagPart} ${p.name.padEnd(40)} [${p.required ? 'obrigatório' : 'opcional   '}] — ${p.description}`;
+        }).join('\n')
+      : '  (sem parâmetros definidos)';
+
+    return `### JOB TIPO ${job.id} — ${job.name}
+Script: ${job.script}
+Descrição: ${job.description}
+Parâmetros:
+${paramLines}`;
+  }).join('\n\n');
+
+  return `${BASE_SYSTEM_PROMPT}
+
+## MAPEAMENTO COMPLETO DE JOBS (${jobs.length} tipos cadastrados)
+
+${jobsSection}
+${PROMPT_SUFFIX}`;
+}
+
+const DEFAULT_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + PROMPT_SUFFIX;
+
 
 type Message = {
   id: string;
@@ -40,7 +87,7 @@ export function AgentView() {
     {
       id: '1',
       role: 'agent',
-      text: 'Olá! Sou o Hudson Virtual, seu Agente de IA para automação de Jobs.\n\nO que você deseja configurar hoje?\n1. Transferência de Arquivos (Transhost - Jobs 3 e 10)\n2. Execução de Job SWADM (Job Tipo 1)\n3. Execução de Programa JAVA (Job Tipo 9)',
+      text: 'Olá! Sou o Hudson Virtual, seu Agente de IA para automação de Jobs da DATAPREV.\n\nQual workload você deseja configurar hoje?\n1. Geração de LISTA TRANS_HOSTS + Transferência de Arqs (Job Tipo 3 e Tipo 10)\n2. Execução de JOBS TIPO SWADM (Job Tipo 1)\n3. Execução de PROGRAMAS JAVA (Job Tipo 9)\n\nDigite o número da opção ou faça uma pergunta livre.',
     },
   ]);
   const [inputValue, setInputValue] = useState('');
@@ -50,6 +97,7 @@ export function AgentView() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+  const [allJobs, setAllJobs] = useState<JobTypeWithParameters[]>([]);
 
   const [transhostData, setTranshostData] = useState<TranshostData>({});
   const [swadmData, setSwadmData] = useState<SwadmData>({});
@@ -58,9 +106,30 @@ export function AgentView() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    systemPromptService.getActive().then(content => {
-      if (content) setSystemPrompt(content);
-    });
+    async function init() {
+      const [savedPrompt, allJobs] = await Promise.all([
+        systemPromptService.getActive(),
+        jobService.getAll(),
+      ]);
+      if (savedPrompt) {
+        setSystemPrompt(savedPrompt);
+      } else if (allJobs.length > 0) {
+        setSystemPrompt(buildPromptFromJobs(allJobs));
+      }
+
+      if (allJobs.length > 0) {
+        setAllJobs(allJobs);
+        const options = allJobs
+          .map((j, i) => `${i + 1}. ${j.name} (Job Tipo ${j.id})`)
+          .join('\n');
+        setMessages([{
+          id: '1',
+          role: 'agent',
+          text: `Olá! Sou o Hudson Virtual, seu Agente de IA para automação de Jobs da DATAPREV.\n\nQual workload você deseja configurar hoje?\n${options}\n\nDigite o número da opção ou faça uma pergunta livre.`,
+        }]);
+      }
+    }
+    init();
   }, []);
 
   useEffect(() => {
@@ -85,9 +154,9 @@ export function AgentView() {
   const callGemini = async (input: string) => {
     setIsLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.0-flash",
         contents: input,
         config: { systemInstruction: systemPrompt },
       });
@@ -117,18 +186,29 @@ export function AgentView() {
 
   const processInput = (input: string) => {
     if (step === 0) {
-      if (input === '1') {
-        setFlow('transhost');
-        setStep(1);
-        addMessage('agent', 'Iniciando fluxo de Transferência (Transhost). Qual é o nome do arquivo de origem?');
-      } else if (input === '2') {
-        setFlow('swadm');
-        setStep(1);
-        addMessage('agent', 'Iniciando fluxo SWADM. Qual é o nome do Shell SWAdm? (Ex: MeuJobSW)');
-      } else if (input === '3') {
-        setFlow('java');
-        setStep(1);
-        addMessage('agent', 'Iniciando fluxo de Programa JAVA. Qual é o diretório de residência do programa? (Ex: /usr/local/app)');
+      const chosen = allJobs[Number(input) - 1];
+      if (chosen) {
+        const jobId = chosen.id;
+        if (jobId === 3 || jobId === 10) {
+          setFlow('transhost');
+          setStep(1);
+          addMessage('agent', 'Iniciando fluxo de Transferência (Transhost). Qual é o nome do arquivo de origem?');
+        } else if (jobId === 1) {
+          setFlow('swadm');
+          setStep(1);
+          addMessage('agent', 'Iniciando fluxo SWADM. Qual é o nome do Shell SWAdm? (Ex: MeuJobSW)');
+        } else if (jobId === 9) {
+          setFlow('java');
+          setStep(1);
+          addMessage('agent', 'Iniciando fluxo de Programa JAVA. Qual é o diretório de residência do programa? (Ex: /usr/local/app)');
+        } else {
+          const paramList = chosen.parameters.length > 0
+            ? chosen.parameters.map(p => `- ${p.flag} (${p.name})${p.required ? ' [obrigatório]' : ''}: ${p.description}`).join('\n')
+            : 'Sem parâmetros definidos.';
+          callGemini(
+            `O usuário quer configurar o Job Tipo ${chosen.id} — "${chosen.name}".\nScript: ${chosen.script}\nDescrição: ${chosen.description}\nParâmetros:\n${paramList}\n\nInicie o fluxo guiado coletando os dados necessários para montar o comando completo.`
+          );
+        }
       } else {
         callGemini(input);
       }
@@ -254,8 +334,24 @@ export function AgentView() {
     const doc = new jsPDF();
     const { fileName, operation, fileType, environment } = finalData;
     const listName = `${fileName}.SH.FASE.1.${operation}`;
-    const job3Command = `/usr/local/bin/P.GEN.LST.010.SH -f${fileName} -A${listName} -t${fileType} -TTL`;
-    const job10Command = `/usr/local/bin/P.GEN.THS.010.SH -a${listName}`;
+
+    const job3 = allJobs.find(j => j.id === 3);
+    const job10 = allJobs.find(j => j.id === 10);
+
+    const job3Command = job3
+      ? buildCommand(job3.script, job3.parameters, {
+          'Arquivo de origem':        fileName,
+          'Arquivo de lista a gerar': listName,
+          'Tipo de arquivo':          fileType,
+          'Tipo de Operação':         'TL',
+        })
+      : `/usr/local/bin/P.GEN.LST.010.SH -f${fileName} -A${listName} -t${fileType} -TTL`;
+
+    const job10Command = job10
+      ? buildCommand(job10.script, job10.parameters, {
+          'Arquivo da lista de processamento': listName,
+        })
+      : `/usr/local/bin/P.GEN.THS.010.SH -a${listName}`;
 
     doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
     doc.text('DATAPREV - Checklist de Execucao de Jobs', 20, 20);
@@ -287,7 +383,14 @@ export function AgentView() {
   const handleDownloadSwadmPDF = (finalData: SwadmData) => {
     const doc = new jsPDF();
     const { shellName, params, executor } = finalData;
-    const command = `/mainframe/sys/swadm/bridge/scripts/startJobs.bridge "${shellName}" "${params}" "${executor}"`;
+    const swadmJob = allJobs.find(j => j.id === 1);
+    const command = swadmJob
+      ? buildCommand(swadmJob.script, swadmJob.parameters, {
+          'Nome do Shell SWAdm':       shellName,
+          'Parâmetros do Shell SWAdm': params,
+          'Executor':                  executor,
+        })
+      : `/mainframe/sys/swadm/bridge/scripts/startJobs.bridge "${shellName}" "${params}" "${executor}"`;
 
     doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
     doc.text('DATAPREV - Checklist de Execucao de Jobs', 20, 20);
@@ -314,8 +417,14 @@ export function AgentView() {
   const handleDownloadJavaPDF = (finalData: JavaData) => {
     const doc = new jsPDF();
     const { directory, programName, params } = finalData;
-    const paramString = params ? ` -P"${params}"` : '';
-    const command = `/usr/local/bin/P.GEN.JVM.010.SH -d${directory} -p${programName}${paramString}`;
+    const javaJob = allJobs.find(j => j.id === 9);
+    const command = javaJob
+      ? buildCommand(javaJob.script, javaJob.parameters, {
+          'Diretório do programa JAVA': directory,
+          'Programa JAVA':              programName,
+          'Parâmetros do prog. JAVA':   params ? `"${params}"` : undefined,
+        })
+      : `/usr/local/bin/P.GEN.JVM.010.SH -d${directory} -p${programName}${params ? ` -P"${params}"` : ''}`;
 
     doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
     doc.text('DATAPREV - Checklist de Execucao de Jobs', 20, 20);
@@ -342,8 +451,24 @@ export function AgentView() {
   const generateTranshostResult = (finalData: TranshostData) => {
     const { fileName, operation, fileType } = finalData;
     const listName = `${fileName}.SH.FASE.1.${operation}`;
-    const job3Command = `/usr/local/bin/P.GEN.LST.010.SH -f${fileName} -A${listName} -t${fileType} -TTL`;
-    const job10Command = `/usr/local/bin/P.GEN.THS.010.SH -a${listName}`;
+
+    const job3 = allJobs.find(j => j.id === 3);
+    const job10 = allJobs.find(j => j.id === 10);
+
+    const job3Command = job3
+      ? buildCommand(job3.script, job3.parameters, {
+          'Arquivo de origem':        fileName,
+          'Arquivo de lista a gerar': listName,
+          'Tipo de arquivo':          fileType,
+          'Tipo de Operação':         'TL',
+        })
+      : `/usr/local/bin/P.GEN.LST.010.SH -f${fileName} -A${listName} -t${fileType} -TTL`;
+
+    const job10Command = job10
+      ? buildCommand(job10.script, job10.parameters, {
+          'Arquivo da lista de processamento': listName,
+        })
+      : `/usr/local/bin/P.GEN.THS.010.SH -a${listName}`;
 
     checklistService.create({
       type: 'transhost',
@@ -388,7 +513,14 @@ export function AgentView() {
   };
 
   const generateSwadmResult = (finalData: SwadmData) => {
-    const command = `/mainframe/sys/swadm/bridge/scripts/startJobs.bridge "${finalData.shellName}" "${finalData.params}" "${finalData.executor}"`;
+    const swadmJob = allJobs.find(j => j.id === 1);
+    const command = swadmJob
+      ? buildCommand(swadmJob.script, swadmJob.parameters, {
+          'Nome do Shell SWAdm':       finalData.shellName,
+          'Parâmetros do Shell SWAdm': finalData.params,
+          'Executor':                  finalData.executor,
+        })
+      : `/mainframe/sys/swadm/bridge/scripts/startJobs.bridge "${finalData.shellName}" "${finalData.params}" "${finalData.executor}"`;
 
     checklistService.create({
       type: 'swadm',
@@ -429,8 +561,14 @@ export function AgentView() {
   };
 
   const generateJavaResult = (finalData: JavaData) => {
-    const paramString = finalData.params ? ` -P"${finalData.params}"` : '';
-    const command = `/usr/local/bin/P.GEN.JVM.010.SH -d${finalData.directory} -p${finalData.programName}${paramString}`;
+    const javaJob = allJobs.find(j => j.id === 9);
+    const command = javaJob
+      ? buildCommand(javaJob.script, javaJob.parameters, {
+          'Diretório do programa JAVA': finalData.directory,
+          'Programa JAVA':              finalData.programName,
+          'Parâmetros do prog. JAVA':   finalData.params ? `"${finalData.params}"` : undefined,
+        })
+      : `/usr/local/bin/P.GEN.JVM.010.SH -d${finalData.directory} -p${finalData.programName}${finalData.params ? ` -P"${finalData.params}"` : ''}`;
 
     checklistService.create({
       type: 'java',

@@ -13,7 +13,12 @@
       "PowerShell(if \\(-not $?\\) { \"File not found\" })",
       "PowerShell(Get-Content \".git\\\\packed-refs\" | ForEach-Object { Write-Host \"[$_]\" })",
       "PowerShell(Get-ChildItem -Path \"c:\\\\GIT\\\\JobsIA\" -Recurse -Force -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '\\\\.\\(json|tsx|ts|jsx|js|vue\\)$' } | Select-Object -First 50 FullName)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\GIT\\\\JobsIA\" -Directory -Force)",
+      "Bash(Select-Object Name)",
+      "Bash(xargs grep -l \"useContext\\\\|Context\\\\|Provider\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\GIT\\\\JobsIA\" -Recurse -Filter \"*.tsx\" -o File)",
+      "Bash(Select-Object -First 50)"
     ]
   }
 }

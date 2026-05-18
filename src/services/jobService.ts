@@ -16,7 +16,8 @@ export const jobService = {
     const { data: params, error: paramsError } = await supabase
       .from(PARAMS_TABLE)
       .select('*')
-      .order('job_type_id', { ascending: true });
+      .order('job_type_id', { ascending: true })
+      .order('order_index', { ascending: true });
     if (paramsError) { console.error('jobService.getAll params:', paramsError); return []; }
 
     return (types ?? []).map(type => ({
@@ -105,12 +106,16 @@ export const jobService = {
       if (jobError) { console.error('jobService.seedIfEmpty job:', jobError); continue; }
 
       if (job.parameters.length > 0) {
-        const rows = job.parameters.map(p => ({
+        const rows = job.parameters.map((p, i) => ({
           job_type_id: createdJob.id,
-          flag: p.flag,
+          flag: p.flag ?? null,
           name: p.name,
           required: p.required,
           description: p.description,
+          parameter_type: p.parameter_type ?? 'flag',
+          order_index: i,
+          data_type: 'text',
+          active: true,
         }));
         await supabase.from(PARAMS_TABLE).insert(rows);
       }
