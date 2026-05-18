@@ -88,6 +88,8 @@ type JavaData = {
   params?: string;
 };
 
+type GenericData = Record<string, string>;
+
 const RESTART_COMMANDS = ['novo', 'nova', 'reiniciar', 'recomeçar', 'começar', 'inicio', 'início', 'menu'];
 
 const INITIAL_MESSAGE = 'Olá! Sou o Hudson Virtual, seu Agente de IA para automação de Jobs.\n\nO que você deseja configurar hoje?\n1. Transferência de Arquivos (Transhost - Jobs 3 e 10)\n2. Execução de Job SWADM (Job Tipo 1)\n3. Execução de Programa JAVA (Job Tipo 9)\n\nOu faça uma pergunta livre sobre Jobs da DIOT.';
@@ -98,7 +100,7 @@ export function AgentView() {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [step, setStep] = useState<number>(0);
-  const [flow, setFlow] = useState<'transhost' | 'swadm' | 'java' | null>(null);
+  const [flow, setFlow] = useState<'transhost' | 'swadm' | 'java' | 'generic' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -110,6 +112,8 @@ export function AgentView() {
   const [transhostData, setTranshostData] = useState<TranshostData>({});
   const [swadmData, setSwadmData] = useState<SwadmData>({});
   const [javaData, setJavaData] = useState<JavaData>({});
+  const [genericData, setGenericData] = useState<GenericData>({});
+  const [currentGenericJob, setCurrentGenericJob] = useState<JobTypeWithParameters | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -216,8 +220,13 @@ export function AgentView() {
     setTranshostData({});
     setSwadmData({});
     setJavaData({});
+    setGenericData({});
+    setCurrentGenericJob(null);
     setChatHistory([]);
-    addMessage('agent', 'Nova conversa iniciada! ' + INITIAL_MESSAGE);
+    const restartMsg = allJobs.length > 0
+      ? `Nova conversa iniciada!\n\nQual workload você deseja configurar hoje?\n${allJobs.map((j, i) => `${i + 1}. ${j.name} (Job Tipo ${j.id})`).join('\n')}\n\nDigite o número da opção ou faça uma pergunta livre.`
+      : 'Nova conversa iniciada! ' + INITIAL_MESSAGE;
+    addMessage('agent', restartMsg);
   };
 
   const handleSend = () => {
@@ -260,12 +269,26 @@ export function AgentView() {
           setStep(1);
           addMessage('agent', 'Iniciando fluxo de Programa JAVA. Qual é o diretório de residência do programa? (Ex: /usr/local/app)');
         } else {
-          const paramList = chosen.parameters.length > 0
-            ? chosen.parameters.map(p => `- ${p.flag} (${p.name})${p.required ? ' [obrigatório]' : ''}: ${p.description}`).join('\n')
-            : 'Sem parâmetros definidos.';
-          callGemini(
-            `O usuário quer configurar o Job Tipo ${chosen.id} — "${chosen.name}".\nScript: ${chosen.script}\nDescrição: ${chosen.description}\nParâmetros:\n${paramList}\n\nInicie o fluxo guiado coletando os dados necessários para montar o comando completo.`
+          const collectableParams = chosen.parameters.filter(
+            p => p.parameter_type !== 'internal' && p.parameter_type !== 'generated'
           );
+          setCurrentGenericJob(chosen);
+          setGenericData({});
+          setFlow('generic');
+          if (collectableParams.length === 0) {
+            generateGenericResult(chosen, {});
+            setStep(1);
+          } else {
+            setStep(1);
+            const first = collectableParams[0];
+            addMessage('agent',
+              `Iniciando fluxo ${chosen.name} (Job Tipo ${chosen.id}).\n\n` +
+              `1/${collectableParams.length} — ${first.name}` +
+              `${first.required ? ' [obrigatório]' : ' [opcional — "nenhum" para pular]'}:\n` +
+              first.description +
+              (first.example_value ? `\nEx: ${first.example_value}` : '')
+            );
+          }
         }
       } else {
         callGemini(input);
@@ -377,6 +400,40 @@ export function AgentView() {
           generateJavaResult(finalData);
           setStep(4);
           break;
+        }
+      }
+    }
+
+    if (flow === 'generic' && currentGenericJob) {
+      const collectableParams = currentGenericJob.parameters.filter(
+        p => p.parameter_type !== 'internal' && p.parameter_type !== 'generated'
+      );
+      const currentParamIndex = step - 1;
+      const currentParam = collectableParams[currentParamIndex];
+
+      if (currentParam) {
+        if (currentParam.required && !input.trim()) {
+          addMessage('agent', `Este campo é obrigatório. Informe o valor para "${currentParam.name}":`, true);
+          return;
+        }
+        const value = input.trim().toLowerCase() === 'nenhum' ? '' : input.trim();
+        const newData = { ...genericData, [currentParam.name]: value };
+        setGenericData(newData);
+
+        const nextIndex = currentParamIndex + 1;
+        if (nextIndex < collectableParams.length) {
+          const next = collectableParams[nextIndex];
+          addMessage('agent',
+            `"${currentParam.name}" registrado.\n\n` +
+            `${nextIndex + 1}/${collectableParams.length} — ${next.name}` +
+            `${next.required ? ' [obrigatório]' : ' [opcional — "nenhum" para pular]'}:\n` +
+            next.description +
+            (next.example_value ? `\nEx: ${next.example_value}` : '')
+          );
+          setStep(step + 1);
+        } else {
+          generateGenericResult(currentGenericJob, newData);
+          setStep(step + 1);
         }
       }
     }
@@ -498,6 +555,38 @@ export function AgentView() {
     doc.setFont('helvetica', 'italic'); doc.setTextColor(150);
     doc.text(`Data de geracao: ${new Date().toLocaleString('pt-BR')}`, 20, 280);
     doc.save(`Checklist_JAVA_${programName}.pdf`);
+  };
+
+  const handleDownloadGenericPDF = (job: JobTypeWithParameters, data: GenericData, command: string) => {
+    const doc = new jsPDF();
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('DATAPREV - Checklist de Execucao de Jobs', 20, 20);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100);
+    doc.text('Gerado automaticamente pelo Agente de IA (Hudson Virtual)', 20, 28);
+    doc.setDrawColor(200); doc.line(20, 32, 190, 32);
+    doc.setFontSize(12); doc.setTextColor(0); doc.setFont('helvetica', 'bold');
+    doc.text(`1. DADOS GERAIS (${job.name.toUpperCase()} - TIPO ${job.id})`, 20, 45);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    let yPos = 55;
+    for (const [key, value] of Object.entries(data)) {
+      if (value) {
+        doc.text(`${key}: ${value}`, 25, yPos);
+        yPos += 7;
+        if (yPos > 250) break;
+      }
+    }
+    yPos = Math.max(yPos + 10, 95);
+    doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text('2. ESPECIFICACAO DO JOB (WORKLOAD)', 20, yPos);
+    yPos += 10;
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text(`Job Tipo ${job.id} - ${job.name}`, 25, yPos);
+    yPos += 10;
+    doc.setFont('courier', 'normal'); doc.setTextColor(0, 100, 0);
+    doc.text(command, 25, yPos, { maxWidth: 160 });
+    doc.setFont('helvetica', 'italic'); doc.setTextColor(150);
+    doc.text(`Data de geracao: ${new Date().toLocaleString('pt-BR')}`, 20, 280);
+    doc.save(`Checklist_Tipo${job.id}_${job.name.replace(/\s+/g, '_')}.pdf`);
   };
 
   const generateTranshostResult = (finalData: TranshostData) => {
@@ -663,10 +752,57 @@ export function AgentView() {
     addMessage('agent', resultNode);
   };
 
+  const generateGenericResult = (job: JobTypeWithParameters, data: GenericData) => {
+    const command = buildCommand(job.script, job.parameters, data);
+
+    checklistService.create({
+      type: `generic_tipo_${job.id}`,
+      data: data as Record<string, unknown>,
+      status: 'Concluído',
+      file_name: Object.values(data)[0] || job.name,
+    });
+
+    const resultNode = (
+      <div className="mt-4 space-y-4 w-full">
+        <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+          <CheckCircle2 className="w-5 h-5" />
+          <span>Checklist {job.name} (Tipo {job.id}) gerado com sucesso!</span>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-slate-300 relative group">
+          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => navigator.clipboard.writeText(command)}
+              className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+          </div>
+          <div>
+            <span className="text-slate-500"># Job Tipo {job.id} — {job.name}</span>
+            <div className="text-emerald-400 mt-1 break-all">{command}</div>
+          </div>
+        </div>
+        <button
+          onClick={() => handleDownloadGenericPDF(job, data, command)}
+          className="mt-2 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
+        >
+          <FileDown className="w-5 h-5" /> Baixar PDF do Checklist
+        </button>
+        <p className="text-xs text-slate-400 text-center">Checklist concluído. Faça perguntas ao Hudson ou digite <span className="font-semibold text-slate-500">novo</span> para recomeçar.</p>
+      </div>
+    );
+    addMessage('agent', resultNode);
+  };
+
+  const genericCollectableCount = currentGenericJob
+    ? currentGenericJob.parameters.filter(p => p.parameter_type !== 'internal' && p.parameter_type !== 'generated').length
+    : 0;
+
   const isDone =
     (flow === 'transhost' && step >= 5) ||
     (flow === 'swadm' && step >= 4) ||
-    (flow === 'java' && step >= 4);
+    (flow === 'java' && step >= 4) ||
+    (flow === 'generic' && step > genericCollectableCount);
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500 relative">

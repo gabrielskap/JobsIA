@@ -80,7 +80,7 @@ export interface Message {
 export interface Checklist {
   id: string;
   conversation_id?: string;
-  type: 'transhost' | 'swadm' | 'java';
+  type: string;
   data: Record<string, unknown>;
   status: 'Concluído' | 'Falha Validação';
   user_name?: string;
