@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, ReactNode } from 'react';
-import { Bot, User, Send, CheckCircle2, AlertCircle, Copy, FileDown, Settings2, X, Save, MessageSquare } from 'lucide-react';
+import { Bot, User, Send, CheckCircle2, AlertCircle, Copy, FileDown, Settings2, X, Save, MessageSquare, BookOpen, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { GoogleGenAI } from "@google/genai";
 import { systemPromptService } from '../services/systemPromptService';
@@ -7,6 +7,7 @@ import { checklistService } from '../services/checklistService';
 import { jobService } from '../services/jobService';
 import { buildCommand } from '../utils/commandBuilder';
 import type { JobTypeWithParameters } from '../types/database';
+import { dictionary, norms, jobs } from '../data/knowledgeBase';
 
 const BASE_SYSTEM_PROMPT = `Você é o Jobs IA (Hudson Virtual), um Agente de IA especializado em automação e preenchimento de checklists de Jobs da DATAPREV (DIOT).
 Sua missão é guiar o usuário de forma técnica, precisa e amigável na criação de workloads para Unix, Windows e Mainframe.
@@ -63,6 +64,11 @@ type Message = {
   isError?: boolean;
 };
 
+type ChatMessage = {
+  role: 'user' | 'model';
+  parts: Array<{ text: string }>;
+};
+
 type TranshostData = {
   fileName?: string;
   environment?: 'Unix/Linux' | 'Windows';
@@ -82,13 +88,13 @@ type JavaData = {
   params?: string;
 };
 
+const RESTART_COMMANDS = ['novo', 'nova', 'reiniciar', 'recomeçar', 'começar', 'inicio', 'início', 'menu'];
+
+const INITIAL_MESSAGE = 'Olá! Sou o Hudson Virtual, seu Agente de IA para automação de Jobs.\n\nO que você deseja configurar hoje?\n1. Transferência de Arquivos (Transhost - Jobs 3 e 10)\n2. Execução de Job SWADM (Job Tipo 1)\n3. Execução de Programa JAVA (Job Tipo 9)\n\nOu faça uma pergunta livre sobre Jobs da DIOT.';
+
 export function AgentView() {
   const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'agent',
-      text: 'Olá! Sou o Hudson Virtual, seu Agente de IA para automação de Jobs da DATAPREV.\n\nQual workload você deseja configurar hoje?\n1. Geração de LISTA TRANS_HOSTS + Transferência de Arqs (Job Tipo 3 e Tipo 10)\n2. Execução de JOBS TIPO SWADM (Job Tipo 1)\n3. Execução de PROGRAMAS JAVA (Job Tipo 9)\n\nDigite o número da opção ou faça uma pergunta livre.',
-    },
+    { id: '1', role: 'agent', text: INITIAL_MESSAGE },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [step, setStep] = useState<number>(0);
@@ -98,6 +104,8 @@ export function AgentView() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
   const [allJobs, setAllJobs] = useState<JobTypeWithParameters[]>([]);
+  const [isKnowledgeExpanded, setIsKnowledgeExpanded] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
 
   const [transhostData, setTranshostData] = useState<TranshostData>({});
   const [swadmData, setSwadmData] = useState<SwadmData>({});
@@ -151,19 +159,45 @@ export function AgentView() {
     ));
   };
 
+  const buildKnowledgeContext = () => {
+    const dictText = dictionary.map(d => `- ${d.term} (${d.category}): ${d.definition}`).join('\n');
+    const normsText = norms.rules.map(r => `- [${r.environment}] ${r.rule}`).join('\n');
+    const jobsText = jobs.map(j => {
+      const params = j.parameters.map(p => `    ${p.flag}: ${p.name}${p.required ? ' [obrigatório]' : ''} — ${p.description}`).join('\n');
+      return `- Job Tipo ${j.id} — ${j.name}\n  Script: ${j.script}\n  Descrição: ${j.description}\n  Parâmetros:\n${params}`;
+    }).join('\n\n');
+
+    return `\n\n## BASE DE CONHECIMENTO ATIVA\n\n### Dicionário de Termos:\n${dictText}\n\n### Normas de Nomenclatura (${norms.title}):\n${normsText}\n\n### Jobs Genéricos e Scripts:\n${jobsText}`;
+  };
+
   const callGemini = async (input: string) => {
     setIsLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        addMessage('agent', 'Chave de API não configurada. Verifique o arquivo .env (VITE_GEMINI_API_KEY).', true);
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const fullSystemPrompt = systemPrompt + buildKnowledgeContext();
+
+      const newUserMessage: ChatMessage = { role: 'user', parts: [{ text: input }] };
+      const contents = [...chatHistory, newUserMessage];
+
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: input,
-        config: { systemInstruction: systemPrompt },
+        model: 'gemini-2.0-flash',
+        contents,
+        config: { systemInstruction: fullSystemPrompt },
       });
-      addMessage('agent', response.text || "Desculpe, não consegui processar sua solicitação.");
+
+      const responseText = response.text || 'Desculpe, não consegui processar sua solicitação.';
+
+      setChatHistory([...contents, { role: 'model', parts: [{ text: responseText }] }]);
+      addMessage('agent', responseText);
     } catch (error) {
       console.error(error);
-      addMessage('agent', "Ocorreu um erro ao consultar minha base de conhecimento de IA.", true);
+      addMessage('agent', 'Ocorreu um erro ao consultar a IA. Verifique o console para detalhes.', true);
     } finally {
       setIsLoading(false);
     }
@@ -176,6 +210,16 @@ export function AgentView() {
     return null;
   };
 
+  const handleRestart = () => {
+    setStep(0);
+    setFlow(null);
+    setTranshostData({});
+    setSwadmData({});
+    setJavaData({});
+    setChatHistory([]);
+    addMessage('agent', 'Nova conversa iniciada! ' + INITIAL_MESSAGE);
+  };
+
   const handleSend = () => {
     if (!inputValue.trim() || isLoading) return;
     const userInput = inputValue.trim();
@@ -185,6 +229,20 @@ export function AgentView() {
   };
 
   const processInput = (input: string) => {
+    const inputLower = input.toLowerCase().trim();
+
+    // Restart command works at any time
+    if (RESTART_COMMANDS.includes(inputLower)) {
+      handleRestart();
+      return;
+    }
+
+    // After a flow is complete, route to AI for free conversation
+    if (isDone) {
+      callGemini(input);
+      return;
+    }
+
     if (step === 0) {
       const chosen = allJobs[Number(input) - 1];
       if (chosen) {
@@ -272,8 +330,6 @@ export function AgentView() {
           }
           break;
         }
-        default:
-          addMessage('agent', 'O checklist já foi gerado. Se desejar criar outro, recarregue a página.');
       }
     }
 
@@ -296,8 +352,6 @@ export function AgentView() {
           setStep(4);
           break;
         }
-        default:
-          addMessage('agent', 'O checklist já foi gerado. Se desejar criar outro, recarregue a página.');
       }
     }
 
@@ -324,8 +378,6 @@ export function AgentView() {
           setStep(4);
           break;
         }
-        default:
-          addMessage('agent', 'O checklist já foi gerado. Se desejar criar outro, recarregue a página.');
       }
     }
   };
@@ -503,10 +555,11 @@ export function AgentView() {
         </div>
         <button
           onClick={() => handleDownloadTranshostPDF(finalData)}
-          className="mt-4 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
+          className="mt-2 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
         >
           <FileDown className="w-5 h-5" /> Baixar PDF do Checklist
         </button>
+        <p className="text-xs text-slate-400 text-center">Checklist concluído. Faça perguntas ao Hudson ou digite <span className="font-semibold text-slate-500">novo</span> para recomeçar.</p>
       </div>
     );
     addMessage('agent', resultNode);
@@ -551,10 +604,11 @@ export function AgentView() {
         </div>
         <button
           onClick={() => handleDownloadSwadmPDF(finalData)}
-          className="mt-4 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
+          className="mt-2 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
         >
           <FileDown className="w-5 h-5" /> Baixar PDF do Checklist
         </button>
+        <p className="text-xs text-slate-400 text-center">Checklist concluído. Faça perguntas ao Hudson ou digite <span className="font-semibold text-slate-500">novo</span> para recomeçar.</p>
       </div>
     );
     addMessage('agent', resultNode);
@@ -599,10 +653,11 @@ export function AgentView() {
         </div>
         <button
           onClick={() => handleDownloadJavaPDF(finalData)}
-          className="mt-4 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
+          className="mt-2 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
         >
           <FileDown className="w-5 h-5" /> Baixar PDF do Checklist
         </button>
+        <p className="text-xs text-slate-400 text-center">Checklist concluído. Faça perguntas ao Hudson ou digite <span className="font-semibold text-slate-500">novo</span> para recomeçar.</p>
       </div>
     );
     addMessage('agent', resultNode);
@@ -633,19 +688,88 @@ export function AgentView() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* System Prompt */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                   <MessageSquare className="w-3 h-3" /> Instruções de IA (Prompt)
                 </h4>
                 <p className="text-xs text-slate-500 bg-blue-50 p-3 rounded-lg border border-blue-100 italic">
-                  Defina o "vibe", tom de voz e regras específicas que o Hudson Virtual deve seguir ao interagir fora dos fluxos fixos.
+                  Defina o tom de voz e regras que o Hudson Virtual deve seguir ao interagir.
                 </p>
                 <textarea
                   value={systemPrompt}
                   onChange={(e) => setSystemPrompt(e.target.value)}
                   placeholder="Instruções para o agente..."
-                  className="w-full h-[calc(100vh-22rem)] p-3 text-sm text-slate-700 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none font-medium leading-relaxed"
+                  className="w-full h-40 p-3 text-sm text-slate-700 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none font-medium leading-relaxed"
                 />
+              </div>
+
+              {/* Knowledge Base Section */}
+              <div className="space-y-2">
+                <button
+                  onClick={() => setIsKnowledgeExpanded(v => !v)}
+                  className="w-full flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <BookOpen className="w-3 h-3" /> Base de Conhecimento Ativa
+                  </span>
+                  {isKnowledgeExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                <p className="text-xs text-slate-500 bg-emerald-50 p-3 rounded-lg border border-emerald-100 italic">
+                  Estes dados são injetados automaticamente no contexto do agente a cada mensagem.
+                </p>
+
+                {isKnowledgeExpanded && (
+                  <div className="space-y-3">
+                    {/* Dictionary */}
+                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
+                      <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
+                        Dicionário
+                        <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">{dictionary.length}</span>
+                      </p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {dictionary.map(d => (
+                          <div key={d.term} className="text-xs text-slate-600">
+                            <span className="font-semibold text-slate-700">{d.term}</span>
+                            <span className="text-slate-400 ml-1 text-[10px]">({d.category})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Norms */}
+                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
+                      <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
+                        Normas
+                        <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">{norms.rules.length}</span>
+                      </p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {norms.rules.map((r, i) => (
+                          <div key={i} className="text-xs text-slate-600">
+                            <span className="font-semibold text-slate-700">[{r.environment}]</span>{' '}
+                            <span className="text-slate-500">{r.rule.substring(0, 55)}{r.rule.length > 55 ? '…' : ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Jobs */}
+                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
+                      <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
+                        Jobs Genéricos
+                        <span className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">{jobs.length}</span>
+                      </p>
+                      <div className="space-y-1">
+                        {jobs.map(j => (
+                          <div key={j.id} className="text-xs text-slate-600">
+                            <span className="font-semibold text-slate-700">Tipo {j.id}:</span>{' '}
+                            <span className="text-slate-500">{j.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -678,14 +802,23 @@ export function AgentView() {
             <p className="text-xs text-slate-500">Assistente de preenchimento de Jobs</p>
           </div>
         </div>
-        <button
-          onClick={() => setIsSettingsOpen(true)}
-          className="p-2 hover:bg-slate-200 text-slate-500 rounded-lg transition-all flex items-center gap-2 text-sm font-medium"
-          title="Configurar Comportamento"
-        >
-          <Settings2 className="w-5 h-5" />
-          <span className="hidden md:inline">Instruções</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRestart}
+            className="p-2 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg transition-all"
+            title="Nova conversa"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 hover:bg-slate-200 text-slate-500 rounded-lg transition-all flex items-center gap-2 text-sm font-medium"
+            title="Configurar Comportamento"
+          >
+            <Settings2 className="w-5 h-5" />
+            <span className="hidden md:inline">Instruções</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -734,6 +867,17 @@ export function AgentView() {
       </div>
 
       <div className="p-4 bg-white border-t border-slate-200">
+        {isDone && (
+          <div className="mb-2 flex items-center gap-2">
+            <button
+              onClick={handleRestart}
+              className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold py-1.5 px-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+            >
+              <RefreshCw className="w-3 h-3" /> Nova Conversa
+            </button>
+            <span className="text-xs text-slate-400">ou faça uma pergunta ao Hudson abaixo</span>
+          </div>
+        )}
         <div className="flex gap-2">
           <input
             type="text"
@@ -744,15 +888,15 @@ export function AgentView() {
               isLoading
                 ? 'Hudson está pensando...'
                 : isDone
-                ? 'Checklist concluído.'
-                : 'Digite sua resposta...'
+                ? 'Faça uma pergunta ou digite "novo" para reiniciar...'
+                : 'Digite sua resposta ou faça uma pergunta...'
             }
-            disabled={isLoading || isDone}
+            disabled={isLoading}
             className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all disabled:opacity-50"
           />
           <button
             onClick={handleSend}
-            disabled={!inputValue.trim() || isLoading || isDone}
+            disabled={!inputValue.trim() || isLoading}
             className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:hover:bg-blue-600 flex items-center gap-2 font-medium"
           >
             <span>{isLoading ? '...' : 'Enviar'}</span>
