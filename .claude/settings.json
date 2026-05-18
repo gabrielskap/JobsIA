@@ -18,7 +18,8 @@
       "Bash(Select-Object Name)",
       "Bash(xargs grep -l \"useContext\\\\|Context\\\\|Provider\")",
       "Bash(Get-ChildItem -Path \"c:\\\\GIT\\\\JobsIA\" -Recurse -Filter \"*.tsx\" -o File)",
-      "Bash(Select-Object -First 50)"
+      "Bash(Select-Object -First 50)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
