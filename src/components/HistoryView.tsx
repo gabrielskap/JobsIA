@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { History, FileText, Download, Search, TrendingUp, CheckCircle, XCircle, Activity, Loader2 } from 'lucide-react';
 import { checklistService } from '../services/checklistService';
 import type { Checklist } from '../types/database';
+import { useAuth } from '../contexts/AuthContext';
+import { createChecklistPDF } from '../utils/pdfGenerator';
 
 const TYPE_LABEL: Record<Checklist['type'], string> = {
   transhost: 'Transhost (Jobs 3 e 10)',
@@ -10,23 +12,38 @@ const TYPE_LABEL: Record<Checklist['type'], string> = {
 };
 
 export function HistoryView() {
+  const { profile, user } = useAuth();
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  const currentUserId = profile?.id ?? null;
+
   useEffect(() => {
-    checklistService.getAll().then(data => {
+    if (currentUserId === null) return;
+    checklistService.getAll(currentUserId).then(data => {
       setChecklists(data);
       setLoading(false);
     });
-  }, []);
+  }, [currentUserId]);
 
   const filtered = checklists.filter(item =>
     !search ||
     item.file_name?.toLowerCase().includes(search.toLowerCase()) ||
     TYPE_LABEL[item.type]?.toLowerCase().includes(search.toLowerCase()) ||
-    item.user_name?.toLowerCase().includes(search.toLowerCase())
+    item.type?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleDownload = (item: Checklist) => {
+    const { __command, __job_name, __job_type_id, ...collectedData } = item.data as Record<string, string>;
+    const fields = Object.entries(collectedData)
+      .filter(([, v]) => v)
+      .map(([k, v]) => ({ label: k, value: String(v) }));
+    const jobLabel = `${__job_name ?? item.type} (Tipo ${__job_type_id ?? ''})`;
+    const command = __command ?? '';
+    const saveFileName = `Checklist_${item.type}_${item.file_name ?? 'download'}.pdf`.replace(/\s+/g, '_');
+    createChecklistPDF(jobLabel, fields, [{ label: jobLabel, command }], saveFileName);
+  };
 
   const total = checklists.length;
   const succeeded = checklists.filter(c => c.status === 'Concluído').length;
@@ -133,7 +150,7 @@ export function HistoryView() {
             <tbody className="divide-y divide-slate-200 text-sm">
               {filtered.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-4 text-slate-600">{TYPE_LABEL[item.type]}</td>
+                  <td className="p-4 text-slate-600">{TYPE_LABEL[item.type] ?? item.type}</td>
                   <td className="p-4 text-slate-600 font-mono text-xs">{item.file_name ?? '—'}</td>
                   <td className="p-4 text-slate-500">
                     {new Date(item.created_at).toLocaleString('pt-BR')}
@@ -154,6 +171,7 @@ export function HistoryView() {
                       className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-40"
                       title="Baixar PDF"
                       disabled={item.status !== 'Concluído'}
+                      onClick={() => handleDownload(item)}
                     >
                       <Download className="w-4 h-4" />
                     </button>
