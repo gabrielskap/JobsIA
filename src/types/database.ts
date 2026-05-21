@@ -34,14 +34,24 @@ export interface JobType {
   created_at?: string;
 }
 
+export type ParameterType = 'flag' | 'positional' | 'internal' | 'generated';
+export type ParameterDataType = 'text' | 'number' | 'date' | 'datetime' | 'boolean' | 'path' | 'list';
+
 // Tabela: JobsIA_parameters
 export interface JobParameter {
   id: string;
   job_type_id: number;
-  flag: string;
+  flag: string | null;       // null = sem flag (positional/internal/generated)
   name: string;
   required: boolean;
   description: string;
+  parameter_type: ParameterType;
+  order_index: number;
+  data_type: string;
+  default_value: string | null;
+  example_value: string | null;
+  validation_regex: string | null;
+  active: boolean;
 }
 
 export interface JobTypeWithParameters extends JobType {
@@ -70,10 +80,10 @@ export interface Message {
 export interface Checklist {
   id: string;
   conversation_id?: string;
-  type: 'transhost' | 'swadm' | 'java';
+  type: string;
   data: Record<string, unknown>;
   status: 'Concluído' | 'Falha Validação';
-  user_name?: string;
+  user_id?: string;
   file_name?: string;
   created_at: string;
 }

@@ -14,14 +14,17 @@ export const normService = {
     return data ?? [];
   },
 
-  async create(rule: Omit<NormRule, 'id' | 'created_at'>): Promise<NormRule | null> {
+  async create(rule: Omit<NormRule, 'id' | 'created_at'>): Promise<{ data: NormRule | null; error: string | null }> {
     const { data, error } = await supabase
       .from(TABLE)
       .insert(rule)
       .select()
       .single();
-    if (error) { console.error('normService.create:', error); return null; }
-    return data;
+    if (error) {
+      console.error('normService.create:', error);
+      return { data: null, error: error.message };
+    }
+    return { data, error: null };
   },
 
   async update(id: string, updates: Partial<Omit<NormRule, 'id' | 'created_at'>>): Promise<NormRule | null> {
