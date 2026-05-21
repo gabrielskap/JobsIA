@@ -1,126 +1,13 @@
 import { useState, useRef, useEffect, ReactNode } from 'react';
-import {
-  Bot, User, Send, CheckCircle2, Copy, FileDown,
-  Settings2, X, Save, MessageSquare, BookOpen, ChevronDown, ChevronUp, RefreshCw
-} from 'lucide-react';
-import { createChecklistPDF } from '../utils/pdfGenerator';
+import { Bot, User, Send, CheckCircle2, AlertCircle, Copy, FileDown, Settings2, X, Save, MessageSquare } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { GoogleGenAI } from "@google/genai";
 import { systemPromptService } from '../services/systemPromptService';
 import { checklistService } from '../services/checklistService';
-import { jobService } from '../services/jobService';
-import { buildCommand } from '../utils/commandBuilder';
-import type { JobTypeWithParameters } from '../types/database';
-import { dictionary, norms } from '../data/knowledgeBase';
-import { useAuth } from '../contexts/AuthContext';
 
-// ── SYSTEM PROMPT ────────────────────────────────────────────────────────────
-
-const BASE_SYSTEM_PROMPT = `Você é o Agente de IA de Jobs da DATAPREV (DIOT), especializado em automação de Jobs.
-Sua missão: ajudar o usuário a configurar workloads através de conversa natural e inteligente.
-
-## COMPORTAMENTO
-1. Identifique o tipo de job desejado via conversa natural — sem menus numerados obrigatórios
-2. Colete os parâmetros fazendo perguntas contextuais, uma de cada vez
-3. Para parâmetros opcionais, informe que são opcionais e aceite "nenhum" para pular
-4. Valide nomes de arquivo conforme a Norma N/PD/004/02 e avise sobre violações (mas permita continuar)
-5. Quando tiver TODOS os parâmetros obrigatórios confirmados, chame a função generate_checklist
-6. Após gerar o checklist, pergunte se o usuário precisa de mais alguma coisa
-
-## NORMA N/PD/004/02 — NOMENCLATURA
-- Prefixo obrigatório: 13 caracteres (T d SIS d SUB d 999)
-- Máximo: 36 caracteres em LETRAS MAIÚSCULAS
-- Unix/Linux: delimitador '.' (ponto) — ex: D.CNS.BOE.002.20251016
-- Windows: delimitador '_' (underscore) — ex: D_SCO_ATU_005_BATIMENTO`;
-
-const PROMPT_SUFFIX = `
-
-## REGRAS CRÍTICAS
-- Conduza a conversa de forma natural e empática
-- NUNCA omita parâmetros obrigatórios
-- Quando todos os dados estiverem coletados e confirmados, OBRIGATORIAMENTE chame generate_checklist
-- Em collected_data, use exatamente os nomes dos parâmetros conforme definido no mapeamento de jobs abaixo`;
-
-function buildPromptFromJobs(jobs: JobTypeWithParameters[]): string {
-  if (jobs.length === 0) return BASE_SYSTEM_PROMPT + PROMPT_SUFFIX;
-
-  const jobsSection = jobs.map(job => {
-    const collectableParams = job.parameters.filter(
-      p => p.parameter_type !== 'internal' && p.parameter_type !== 'generated'
-    );
-    const paramLines = collectableParams.length > 0
-      ? collectableParams.map(p =>
-          `  - "${p.name}" [${p.required ? 'OBRIGATÓRIO' : 'opcional'}] (${p.data_type}): ${p.description}${p.example_value ? ` (ex: ${p.example_value})` : ''}`
-        ).join('\n')
-      : '  (sem parâmetros para coletar)';
-
-    return `### JOB TIPO ${job.id} — ${job.name}\nScript: ${job.script}\nDescrição: ${job.description}\nParâmetros:\n${paramLines}`;
-  }).join('\n\n');
-
-  return `${BASE_SYSTEM_PROMPT}\n\n## JOBS DISPONÍVEIS (${jobs.length} tipos)\n\n${jobsSection}${PROMPT_SUFFIX}`;
-}
-
-const DEFAULT_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + PROMPT_SUFFIX;
-
-// ── FUNCTION DECLARATION ─────────────────────────────────────────────────────
-
-const GENERATE_CHECKLIST_TOOL = {
-  functionDeclarations: [{
-    name: 'generate_checklist',
-    description:
-      'Gera o checklist PDF com os dados coletados. ' +
-      'Chame APENAS quando tiver todos os parâmetros obrigatórios confirmados pelo usuário.',
-    parameters: {
-      type: 'object',
-      properties: {
-        job_type_id: {
-          type: 'number',
-          description: 'ID numérico do tipo de job (conforme mapeamento)',
-        },
-        job_name: {
-          type: 'string',
-          description: 'Nome descritivo do tipo de job',
-        },
-        collected_data: {
-          type: 'object',
-          description:
-            'Dados coletados do usuário. Chaves = nomes exatos dos parâmetros conforme o mapeamento. Valores = dados fornecidos pelo usuário.',
-        },
-      },
-      required: ['job_type_id', 'job_name', 'collected_data'],
-    },
-  }],
-};
-
-// ── MODEL DISCOVERY ──────────────────────────────────────────────────────────
-
-const DEFAULT_MODEL = 'gemini-2.5-flash';
-
-async function discoverBestModel(apiKey: string): Promise<string> {
-  const PREFERRED = ['3.5-flash', '3.1-flash', '3-flash', '2.5-flash', '2.0-flash', 'flash'];
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=50`
-    );
-    if (!res.ok) return DEFAULT_MODEL;
-    const data = await res.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
-    const available = (data.models ?? [])
-      .filter(m => (m.supportedGenerationMethods ?? []).includes('generateContent'))
-      .map(m => m.name.replace('models/', ''))
-      .filter(n => !n.includes('embed') && !n.includes('tts') && !n.includes('image') &&
-                   !n.includes('preview') && !n.includes('vision') && !n.includes('robotics') &&
-                   !n.includes('research') && !n.includes('nano') && !n.includes('lyria') &&
-                   !n.includes('gemma'));
-    for (const pref of PREFERRED) {
-      const match = available.find(n => n.includes(pref));
-      if (match) return match;
-    }
-    return available[0] ?? DEFAULT_MODEL;
-  } catch {
-    return DEFAULT_MODEL;
-  }
-}
-
-// ── TYPES ────────────────────────────────────────────────────────────────────
+const DEFAULT_SYSTEM_PROMPT = `Você é o Jobs IA (Hudson Virtual), um Agente de IA especializado em automação e preenchimento de checklists de Jobs da DIOT, com foco em Transhost.
+Sua missão é guiar o usuário de forma técnica, precisa e amigável na criação de workloads para Unix, Windows e Mainframe.
+Siga as normas N/PD/004/02 rigorosamente. Seja conciso e use termos técnicos da Dataprev.`;
 
 type Message = {
   id: string;
@@ -129,56 +16,51 @@ type Message = {
   isError?: boolean;
 };
 
-type ChatPart = Record<string, unknown>;
-type ChatMessage = { role: 'user' | 'model'; parts: ChatPart[] };
+type TranshostData = {
+  fileName?: string;
+  environment?: 'Unix/Linux' | 'Windows';
+  operation?: 'GET' | 'PUT';
+  fileType?: 'arq' | 'meta';
+};
 
-// ── COMPONENT ────────────────────────────────────────────────────────────────
+type SwadmData = {
+  shellName?: string;
+  params?: string;
+  executor?: string;
+};
+
+type JavaData = {
+  directory?: string;
+  programName?: string;
+  params?: string;
+};
 
 export function AgentView() {
-  const { profile, user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'agent',
-      text: 'Olá! Sou o Agente de IA de Jobs da DATAPREV.\n\nPosso te ajudar a configurar qualquer tipo de workload. É só me dizer o que você precisa!',
+      text: 'Olá! Sou o Hudson Virtual, seu Agente de IA para automação de Jobs.\n\nO que você deseja configurar hoje?\n1. Transferência de Arquivos (Transhost - Jobs 3 e 10)\n2. Execução de Job SWADM (Job Tipo 1)\n3. Execução de Programa JAVA (Job Tipo 9)',
     },
   ]);
   const [inputValue, setInputValue] = useState('');
+  const [step, setStep] = useState<number>(0);
+  const [flow, setFlow] = useState<'transhost' | 'swadm' | 'java' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
-  const [allJobs, setAllJobs] = useState<JobTypeWithParameters[]>([]);
-  const [isKnowledgeExpanded, setIsKnowledgeExpanded] = useState(false);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [geminiModel, setGeminiModel] = useState<string>(
-    import.meta.env.VITE_GEMINI_MODEL ?? DEFAULT_MODEL
-  );
+
+  const [transhostData, setTranshostData] = useState<TranshostData>({});
+  const [swadmData, setSwadmData] = useState<SwadmData>({});
+  const [javaData, setJavaData] = useState<JavaData>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    async function init() {
-      const [savedPrompt, loadedJobs] = await Promise.all([
-        systemPromptService.getActive(),
-        jobService.getAll(),
-      ]);
-      if (loadedJobs.length > 0) {
-        setAllJobs(loadedJobs);
-        if (!savedPrompt) setSystemPrompt(buildPromptFromJobs(loadedJobs));
-      }
-      if (savedPrompt) setSystemPrompt(savedPrompt);
-
-      // Auto-discover model if not set via env
-      const envModel = import.meta.env.VITE_GEMINI_MODEL ?? '';
-      if (!envModel) {
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY ?? '';
-        if (apiKey) {
-          const discovered = await discoverBestModel(apiKey);
-          if (discovered) setGeminiModel(discovered);
-        }
-      }
-    }
-    init();
+    systemPromptService.getActive().then(content => {
+      if (content) setSystemPrompt(content);
+    });
   }, []);
 
   useEffect(() => {
@@ -195,68 +77,331 @@ export function AgentView() {
     addMessage('agent', (
       <div className="flex items-center gap-2 text-blue-700 font-medium bg-blue-50 py-1 px-2 rounded-md border border-blue-100 text-xs">
         <CheckCircle2 className="w-3 h-3" />
-        Instruções atualizadas com sucesso!
+        Comportamento atualizado! Minhas instruções foram redefinidas.
       </div>
     ));
   };
 
-  const buildKnowledgeContext = () => {
-    const dictText = dictionary.map(d => `- ${d.term} (${d.category}): ${d.definition}`).join('\n');
-    const normsText = norms.rules.map(r => `- [${r.environment}] ${r.rule}`).join('\n');
-    return `\n\n## BASE DE CONHECIMENTO\n\n### Dicionário:\n${dictText}\n\n### Normas (${norms.title}):\n${normsText}`;
+  const callGemini = async (input: string) => {
+    setIsLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: input,
+        config: { systemInstruction: systemPrompt },
+      });
+      addMessage('agent', response.text || "Desculpe, não consegui processar sua solicitação.");
+    } catch (error) {
+      console.error(error);
+      addMessage('agent', "Ocorreu um erro ao consultar minha base de conhecimento de IA.", true);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // ── HANDLE FUNCTION CALL ──────────────────────────────────────────────────
+  const validateFileName = (name: string, env?: 'Unix/Linux' | 'Windows') => {
+    if (name.length > 36) return 'O nome do arquivo excede 36 caracteres (Norma N/PD/004/02).';
+    if (env === 'Unix/Linux' && !name.includes('.')) return 'Arquivos Unix/Linux devem usar "." (ponto) como delimitador.';
+    if (env === 'Windows' && !name.includes('_')) return 'Arquivos Windows devem usar "_" (underscore) como delimitador.';
+    return null;
+  };
 
-  const handleGenerateChecklist = async (args: {
-    job_type_id: number;
-    job_name: string;
-    collected_data: Record<string, string>;
-  }) => {
-    const { job_type_id, job_name, collected_data } = args;
-    const job = allJobs.find(j => j.id === job_type_id);
+  const handleSend = () => {
+    if (!inputValue.trim() || isLoading) return;
+    const userInput = inputValue.trim();
+    addMessage('user', userInput);
+    setInputValue('');
+    setTimeout(() => processInput(userInput), 400);
+  };
 
-    if (!job) {
-      addMessage(
-        'agent',
-        `Não encontrei o Job Tipo ${job_type_id} na base de dados. Verifique se o job está cadastrado em /jobs.`,
-        true
-      );
+  const processInput = (input: string) => {
+    if (step === 0) {
+      if (input === '1') {
+        setFlow('transhost');
+        setStep(1);
+        addMessage('agent', 'Iniciando fluxo de Transferência (Transhost). Qual é o nome do arquivo de origem?');
+      } else if (input === '2') {
+        setFlow('swadm');
+        setStep(1);
+        addMessage('agent', 'Iniciando fluxo SWADM. Qual é o nome do Shell SWAdm? (Ex: MeuJobSW)');
+      } else if (input === '3') {
+        setFlow('java');
+        setStep(1);
+        addMessage('agent', 'Iniciando fluxo de Programa JAVA. Qual é o diretório de residência do programa? (Ex: /usr/local/app)');
+      } else {
+        callGemini(input);
+      }
       return;
     }
 
-    const command = buildCommand(job.script, job.parameters, collected_data);
+    if (flow === 'transhost') {
+      switch (step) {
+        case 1: {
+          const nameError = validateFileName(input);
+          if (nameError && input.length > 36) {
+            addMessage('agent', nameError, true);
+            addMessage('agent', 'Por favor, informe um nome de arquivo válido:');
+          } else {
+            setTranshostData(prev => ({ ...prev, fileName: input }));
+            addMessage('agent', `Arquivo "${input}" registrado. Qual é o ambiente de origem? (Digite "Unix" ou "Windows")`);
+            setStep(2);
+          }
+          break;
+        }
+        case 2: {
+          const envInput = input.toLowerCase();
+          let env: 'Unix/Linux' | 'Windows' | null = null;
+          if (envInput.includes('unix') || envInput.includes('linux')) env = 'Unix/Linux';
+          else if (envInput.includes('windows')) env = 'Windows';
+          if (!env) {
+            addMessage('agent', 'Ambiente não reconhecido. Por favor, digite "Unix" ou "Windows".', true);
+          } else {
+            const envError = validateFileName(transhostData.fileName!, env);
+            if (envError) {
+              addMessage('agent', `Aviso de Norma: ${envError}`, true);
+              addMessage('agent', 'Vamos prosseguir, mas recomendo revisar a nomenclatura depois. Qual é o sentido da operação? (Digite "GET" ou "PUT")');
+            } else {
+              addMessage('agent', `Ambiente ${env} confirmado. Qual é o sentido da operação? (Digite "GET" ou "PUT")`);
+            }
+            setTranshostData(prev => ({ ...prev, environment: env! }));
+            setStep(3);
+          }
+          break;
+        }
+        case 3: {
+          const opInput = input.toUpperCase();
+          if (opInput !== 'GET' && opInput !== 'PUT') {
+            addMessage('agent', 'Operação inválida. Por favor, digite "GET" ou "PUT".', true);
+          } else {
+            setTranshostData(prev => ({ ...prev, operation: opInput as 'GET' | 'PUT' }));
+            addMessage('agent', `Operação ${opInput} registrada. Qual o tipo de arquivo? (Digite "arq" ou "meta")`);
+            setStep(4);
+          }
+          break;
+        }
+        case 4: {
+          const typeInput = input.toLowerCase();
+          if (typeInput !== 'arq' && typeInput !== 'meta') {
+            addMessage('agent', 'Tipo inválido. Por favor, digite "arq" ou "meta".', true);
+          } else {
+            const finalData = { ...transhostData, fileType: typeInput as 'arq' | 'meta' };
+            setTranshostData(finalData);
+            generateTranshostResult(finalData);
+            setStep(5);
+          }
+          break;
+        }
+        default:
+          addMessage('agent', 'O checklist já foi gerado. Se desejar criar outro, recarregue a página.');
+      }
+    }
 
-    const checklistType = job.script
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '') || `tipo_${job_type_id}`;
-    const fileName = Object.values(collected_data)[0] || job_name;
+    if (flow === 'swadm') {
+      switch (step) {
+        case 1:
+          setSwadmData(prev => ({ ...prev, shellName: input }));
+          addMessage('agent', `Shell "${input}" registrado. Quais são os parâmetros do Shell? (Ex: FASE1|PARAM_A)`);
+          setStep(2);
+          break;
+        case 2:
+          setSwadmData(prev => ({ ...prev, params: input }));
+          addMessage('agent', `Parâmetros registrados. Qual é a matrícula do executor?`);
+          setStep(3);
+          break;
+        case 3: {
+          const finalData = { ...swadmData, executor: input };
+          setSwadmData(finalData);
+          generateSwadmResult(finalData);
+          setStep(4);
+          break;
+        }
+        default:
+          addMessage('agent', 'O checklist já foi gerado. Se desejar criar outro, recarregue a página.');
+      }
+    }
 
-    await checklistService.create({
-      type: checklistType,
-      data: {
-        ...collected_data,
-        __command: command,
-        __job_name: job_name,
-        __job_type_id: job_type_id,
-      } as Record<string, unknown>,
+    if (flow === 'java') {
+      switch (step) {
+        case 1:
+          setJavaData(prev => ({ ...prev, directory: input }));
+          addMessage('agent', `Diretório "${input}" registrado. Qual é o nome do programa JAVA (.jar)?`);
+          setStep(2);
+          break;
+        case 2:
+          if (!input.endsWith('.jar')) {
+            addMessage('agent', 'Aviso: O nome do programa geralmente termina com .jar. Registrando mesmo assim.', true);
+          }
+          setJavaData(prev => ({ ...prev, programName: input }));
+          addMessage('agent', `Programa "${input}" registrado. Quais são os parâmetros do programa? (Digite "nenhum" se não houver)`);
+          setStep(3);
+          break;
+        case 3: {
+          const params = input.toLowerCase() === 'nenhum' ? '' : input;
+          const finalData = { ...javaData, params };
+          setJavaData(finalData);
+          generateJavaResult(finalData);
+          setStep(4);
+          break;
+        }
+        default:
+          addMessage('agent', 'O checklist já foi gerado. Se desejar criar outro, recarregue a página.');
+      }
+    }
+  };
+
+  const handleDownloadTranshostPDF = (finalData: TranshostData) => {
+    const doc = new jsPDF();
+    const { fileName, operation, fileType, environment } = finalData;
+    const listName = `${fileName}.SH.FASE.1.${operation}`;
+    const job3Command = `/usr/local/bin/P.GEN.LST.010.SH -f${fileName} -A${listName} -t${fileType} -TTL`;
+    const job10Command = `/usr/local/bin/P.GEN.THS.010.SH -a${listName}`;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('DATAPREV - Checklist de Execucao de Jobs', 20, 20);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100);
+    doc.text('Gerado automaticamente pelo Agente de IA (Hudson Virtual)', 20, 28);
+    doc.setDrawColor(200); doc.line(20, 32, 190, 32);
+    doc.setFontSize(12); doc.setTextColor(0); doc.setFont('helvetica', 'bold');
+    doc.text('1. DADOS GERAIS DA SOLICITACAO (TRANSHOST)', 20, 45);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.text(`Arquivo de Origem: ${fileName}`, 25, 55);
+    doc.text(`Ambiente: ${environment}`, 25, 62);
+    doc.text(`Sentido da Operacao: ${operation}`, 25, 69);
+    doc.text(`Tipo de Arquivo: ${fileType}`, 25, 76);
+    doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text('2. ESPECIFICACAO DOS JOBS (WORKLOAD)', 20, 95);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text('Job 1 (Tipo 3) - Geracao de LISTA TRANS_HOSTS', 25, 105);
+    doc.setFont('courier', 'normal'); doc.setTextColor(0, 100, 0);
+    doc.text(job3Command, 25, 112, { maxWidth: 160 });
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(0);
+    doc.text('Job 2 (Tipo 10) - Transferencia de Arquivos (GET/PUT)', 25, 130);
+    doc.setFont('courier', 'normal'); doc.setTextColor(0, 0, 150);
+    doc.text(job10Command, 25, 137, { maxWidth: 160 });
+    doc.setFont('helvetica', 'italic'); doc.setTextColor(150);
+    doc.text(`Data de geracao: ${new Date().toLocaleString('pt-BR')}`, 20, 280);
+    doc.save(`Checklist_Transhost_${fileName}.pdf`);
+  };
+
+  const handleDownloadSwadmPDF = (finalData: SwadmData) => {
+    const doc = new jsPDF();
+    const { shellName, params, executor } = finalData;
+    const command = `/mainframe/sys/swadm/bridge/scripts/startJobs.bridge "${shellName}" "${params}" "${executor}"`;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('DATAPREV - Checklist de Execucao de Jobs', 20, 20);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100);
+    doc.text('Gerado automaticamente pelo Agente de IA (Hudson Virtual)', 20, 28);
+    doc.setDrawColor(200); doc.line(20, 32, 190, 32);
+    doc.setFontSize(12); doc.setTextColor(0); doc.setFont('helvetica', 'bold');
+    doc.text('1. DADOS GERAIS DA SOLICITACAO (SWADM)', 20, 45);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.text(`Nome do Shell: ${shellName}`, 25, 55);
+    doc.text(`Parametros: ${params}`, 25, 62);
+    doc.text(`Executor (Matricula): ${executor}`, 25, 69);
+    doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text('2. ESPECIFICACAO DO JOB (WORKLOAD)', 20, 95);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text('Job Tipo 1 - Execucao de JOBS TIPO SWADM', 25, 105);
+    doc.setFont('courier', 'normal'); doc.setTextColor(0, 100, 0);
+    doc.text(command, 25, 112, { maxWidth: 160 });
+    doc.setFont('helvetica', 'italic'); doc.setTextColor(150);
+    doc.text(`Data de geracao: ${new Date().toLocaleString('pt-BR')}`, 20, 280);
+    doc.save(`Checklist_SWADM_${shellName}.pdf`);
+  };
+
+  const handleDownloadJavaPDF = (finalData: JavaData) => {
+    const doc = new jsPDF();
+    const { directory, programName, params } = finalData;
+    const paramString = params ? ` -P"${params}"` : '';
+    const command = `/usr/local/bin/P.GEN.JVM.010.SH -d${directory} -p${programName}${paramString}`;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('DATAPREV - Checklist de Execucao de Jobs', 20, 20);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100);
+    doc.text('Gerado automaticamente pelo Agente de IA (Hudson Virtual)', 20, 28);
+    doc.setDrawColor(200); doc.line(20, 32, 190, 32);
+    doc.setFontSize(12); doc.setTextColor(0); doc.setFont('helvetica', 'bold');
+    doc.text('1. DADOS GERAIS DA SOLICITACAO (JAVA)', 20, 45);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.text(`Diretorio: ${directory}`, 25, 55);
+    doc.text(`Programa: ${programName}`, 25, 62);
+    doc.text(`Parametros: ${params || 'Nenhum'}`, 25, 69);
+    doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text('2. ESPECIFICACAO DO JOB (WORKLOAD)', 20, 95);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text('Job Tipo 9 - Execucao de PROGRAMAS JAVA', 25, 105);
+    doc.setFont('courier', 'normal'); doc.setTextColor(0, 100, 0);
+    doc.text(command, 25, 112, { maxWidth: 160 });
+    doc.setFont('helvetica', 'italic'); doc.setTextColor(150);
+    doc.text(`Data de geracao: ${new Date().toLocaleString('pt-BR')}`, 20, 280);
+    doc.save(`Checklist_JAVA_${programName}.pdf`);
+  };
+
+  const generateTranshostResult = (finalData: TranshostData) => {
+    const { fileName, operation, fileType } = finalData;
+    const listName = `${fileName}.SH.FASE.1.${operation}`;
+    const job3Command = `/usr/local/bin/P.GEN.LST.010.SH -f${fileName} -A${listName} -t${fileType} -TTL`;
+    const job10Command = `/usr/local/bin/P.GEN.THS.010.SH -a${listName}`;
+
+    checklistService.create({
+      type: 'transhost',
+      data: finalData as Record<string, unknown>,
       status: 'Concluído',
       file_name: fileName,
-      user_id: profile?.id,
     });
 
-    const fields = Object.entries(collected_data)
-      .filter(([, v]) => v)
-      .map(([k, v]) => ({ label: k, value: v }));
+    const resultNode = (
+      <div className="mt-4 space-y-4 w-full">
+        <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+          <CheckCircle2 className="w-5 h-5" />
+          <span>Checklist Transhost gerado com sucesso!</span>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-slate-300 relative group">
+          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => navigator.clipboard.writeText(`${job3Command}\n${job10Command}`)}
+              className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="mb-2">
+            <span className="text-slate-500"># Job 1 (Tipo 3)</span>
+            <div className="text-emerald-400 mt-1 break-all">{job3Command}</div>
+          </div>
+          <div className="mt-4">
+            <span className="text-slate-500"># Job 2 (Tipo 10)</span>
+            <div className="text-blue-400 mt-1 break-all">{job10Command}</div>
+          </div>
+        </div>
+        <button
+          onClick={() => handleDownloadTranshostPDF(finalData)}
+          className="mt-4 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
+        >
+          <FileDown className="w-5 h-5" /> Baixar PDF do Checklist
+        </button>
+      </div>
+    );
+    addMessage('agent', resultNode);
+  };
+
+  const generateSwadmResult = (finalData: SwadmData) => {
+    const command = `/mainframe/sys/swadm/bridge/scripts/startJobs.bridge "${finalData.shellName}" "${finalData.params}" "${finalData.executor}"`;
+
+    checklistService.create({
+      type: 'swadm',
+      data: finalData as Record<string, unknown>,
+      status: 'Concluído',
+      file_name: finalData.shellName,
+    });
 
     const resultNode = (
-      <div className="mt-2 space-y-3 w-full">
-        <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>
-            Checklist {job_name} (Tipo {job_type_id}) gerado!
-          </span>
+      <div className="mt-4 space-y-4 w-full">
+        <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+          <CheckCircle2 className="w-5 h-5" />
+          <span>Checklist SWADM gerado com sucesso!</span>
         </div>
         <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-slate-300 relative group">
           <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -267,154 +412,71 @@ export function AgentView() {
               <Copy className="w-4 h-4" />
             </button>
           </div>
-          <span className="text-slate-500 text-xs">
-            # Job Tipo {job_type_id} — {job_name}
-          </span>
-          <div className="text-emerald-400 mt-1 break-all">{command}</div>
+          <div>
+            <span className="text-slate-500"># Job Tipo 1 (SWADM)</span>
+            <div className="text-emerald-400 mt-1 break-all">{command}</div>
+          </div>
         </div>
         <button
-          onClick={() =>
-            createChecklistPDF(
-              `${job_name.toUpperCase()} - TIPO ${job_type_id}`,
-              fields,
-              [{ label: `Job Tipo ${job_type_id} - ${job_name}`, command }],
-              `Checklist_Tipo${job_type_id}_${job_name.replace(/\s+/g, '_')}.pdf`
-            )
-          }
-          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl font-medium transition-colors shadow-sm text-sm"
+          onClick={() => handleDownloadSwadmPDF(finalData)}
+          className="mt-4 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
         >
-          <FileDown className="w-4 h-4" /> Baixar PDF do Checklist
+          <FileDown className="w-5 h-5" /> Baixar PDF do Checklist
         </button>
       </div>
     );
-
     addMessage('agent', resultNode);
   };
 
-  // ── GEMINI CALL ──────────────────────────────────────────────────────────────
+  const generateJavaResult = (finalData: JavaData) => {
+    const paramString = finalData.params ? ` -P"${finalData.params}"` : '';
+    const command = `/usr/local/bin/P.GEN.JVM.010.SH -d${finalData.directory} -p${finalData.programName}${paramString}`;
 
-  const callGemini = async (input: string, history: ChatMessage[]) => {
-    setIsLoading(true);
-    let updatedHistory: ChatMessage[] = history;
+    checklistService.create({
+      type: 'java',
+      data: finalData as Record<string, unknown>,
+      status: 'Concluído',
+      file_name: finalData.programName,
+    });
 
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        addMessage(
-          'agent',
-          'Chave de API não configurada. Verifique o arquivo .env (VITE_GEMINI_API_KEY).',
-          true
-        );
-        return;
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      const fullSystemPrompt = systemPrompt + buildKnowledgeContext();
-
-      const model = geminiModel || DEFAULT_MODEL;
-
-      const newUserMessage: ChatMessage = { role: 'user', parts: [{ text: input }] };
-      const contents: ChatMessage[] = [...history, newUserMessage];
-
-      const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-          systemInstruction: fullSystemPrompt,
-          tools: [GENERATE_CHECKLIST_TOOL],
-        },
-      });
-
-      // Capture model content for history
-      const modelContent = response.candidates?.[0]?.content as ChatMessage | undefined;
-      updatedHistory = [...contents];
-      if (modelContent) updatedHistory.push(modelContent);
-
-      // Check for function calls
-      const functionCalls = (response as unknown as { functionCalls?: Array<{ name: string; args: Record<string, unknown> }> }).functionCalls;
-
-      if (functionCalls && functionCalls.length > 0) {
-        for (const fc of functionCalls) {
-          if (fc.name === 'generate_checklist') {
-            await handleGenerateChecklist(
-              fc.args as { job_type_id: number; job_name: string; collected_data: Record<string, string> }
-            );
-
-            // Send function response back to model for a natural follow-up
-            const funcResponseMsg: ChatMessage = {
-              role: 'user',
-              parts: [{
-                functionResponse: {
-                  name: 'generate_checklist',
-                  response: { success: true, message: 'Checklist gerado e disponível para download.' },
-                },
-              }],
-            };
-            updatedHistory.push(funcResponseMsg);
-
-            const followUp = await ai.models.generateContent({
-              model,
-              contents: updatedHistory,
-              config: { systemInstruction: fullSystemPrompt },
-            });
-
-            const followUpText = followUp.text;
-            if (followUpText) {
-              addMessage('agent', followUpText);
-              updatedHistory.push({ role: 'model', parts: [{ text: followUpText }] });
-            }
-          }
-        }
-      } else {
-        const text = response.text;
-        if (text) {
-          addMessage('agent', text);
-          if (!modelContent) updatedHistory.push({ role: 'model', parts: [{ text }] });
-        } else {
-          addMessage('agent', 'Desculpe, não consegui processar sua solicitação. Pode tentar novamente?', true);
-        }
-      }
-    } catch (error) {
-      console.error(error);
-      addMessage('agent', 'Ocorreu um erro ao consultar a IA. Verifique o console para detalhes.', true);
-    } finally {
-      setIsLoading(false);
-      setChatHistory(updatedHistory);
-    }
+    const resultNode = (
+      <div className="mt-4 space-y-4 w-full">
+        <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+          <CheckCircle2 className="w-5 h-5" />
+          <span>Checklist JAVA gerado com sucesso!</span>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-slate-300 relative group">
+          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => navigator.clipboard.writeText(command)}
+              className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+          </div>
+          <div>
+            <span className="text-slate-500"># Job Tipo 9 (JAVA)</span>
+            <div className="text-emerald-400 mt-1 break-all">{command}</div>
+          </div>
+        </div>
+        <button
+          onClick={() => handleDownloadJavaPDF(finalData)}
+          className="mt-4 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-colors shadow-sm"
+        >
+          <FileDown className="w-5 h-5" /> Baixar PDF do Checklist
+        </button>
+      </div>
+    );
+    addMessage('agent', resultNode);
   };
 
-  // ── HANDLERS ─────────────────────────────────────────────────────────────────
-
-  const handleRestart = () => {
-    setChatHistory([]);
-    setMessages([{
-      id: Date.now().toString(),
-      role: 'agent',
-      text: 'Nova conversa iniciada! O que você precisa configurar hoje?',
-    }]);
-  };
-
-  const handleSend = () => {
-    if (!inputValue.trim() || isLoading) return;
-    const userInput = inputValue.trim();
-    addMessage('user', userInput);
-    setInputValue('');
-
-    const lower = userInput.toLowerCase();
-    if (['novo', 'nova', 'reiniciar', 'recomeçar', 'começar', 'inicio', 'início', 'menu'].includes(lower)) {
-      setTimeout(handleRestart, 300);
-      return;
-    }
-
-    const currentHistory = chatHistory;
-    setTimeout(() => callGemini(userInput, currentHistory), 400);
-  };
-
-  // ── RENDER ────────────────────────────────────────────────────────────────────
+  const isDone =
+    (flow === 'transhost' && step >= 5) ||
+    (flow === 'swadm' && step >= 4) ||
+    (flow === 'java' && step >= 4);
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500 relative">
-      {/* Settings Panel */}
       {isSettingsOpen && (
         <div className="absolute inset-0 z-20 flex justify-end">
           <div
@@ -427,10 +489,7 @@ export function AgentView() {
                 <Settings2 className="w-5 h-5 text-blue-600" />
                 Configurar Comportamento
               </div>
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="p-1 hover:bg-slate-200 rounded-full transition-colors"
-              >
+              <button onClick={() => setIsSettingsOpen(false)} className="p-1 hover:bg-slate-200 rounded-full transition-colors">
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
@@ -441,87 +500,14 @@ export function AgentView() {
                   <MessageSquare className="w-3 h-3" /> Instruções de IA (Prompt)
                 </h4>
                 <p className="text-xs text-slate-500 bg-blue-50 p-3 rounded-lg border border-blue-100 italic">
-                  Defina o tom de voz e regras que o agente deve seguir ao interagir.
+                  Defina o "vibe", tom de voz e regras específicas que o Hudson Virtual deve seguir ao interagir fora dos fluxos fixos.
                 </p>
                 <textarea
                   value={systemPrompt}
-                  onChange={e => setSystemPrompt(e.target.value)}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
                   placeholder="Instruções para o agente..."
-                  className="w-full h-40 p-3 text-sm text-slate-700 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none font-medium leading-relaxed"
+                  className="w-full h-[calc(100vh-22rem)] p-3 text-sm text-slate-700 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none font-medium leading-relaxed"
                 />
-              </div>
-
-
-              <div className="space-y-2">
-                <button
-                  onClick={() => setIsKnowledgeExpanded(v => !v)}
-                  className="w-full flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
-                >
-                  <span className="flex items-center gap-2">
-                    <BookOpen className="w-3 h-3" /> Base de Conhecimento Ativa
-                  </span>
-                  {isKnowledgeExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
-                <p className="text-xs text-slate-500 bg-emerald-50 p-3 rounded-lg border border-emerald-100 italic">
-                  Estes dados são injetados automaticamente no contexto do agente.
-                </p>
-
-                {isKnowledgeExpanded && (
-                  <div className="space-y-3">
-                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
-                        Dicionário
-                        <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                          {dictionary.length}
-                        </span>
-                      </p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {dictionary.map(d => (
-                          <div key={d.term} className="text-xs text-slate-600">
-                            <span className="font-semibold text-slate-700">{d.term}</span>
-                            <span className="text-slate-400 ml-1 text-[10px]">({d.category})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
-                        Normas
-                        <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                          {norms.rules.length}
-                        </span>
-                      </p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {norms.rules.map((r, i) => (
-                          <div key={i} className="text-xs text-slate-600">
-                            <span className="font-semibold text-slate-700">[{r.environment}]</span>{' '}
-                            <span className="text-slate-500">
-                              {r.rule.substring(0, 55)}{r.rule.length > 55 ? '…' : ''}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
-                        Jobs Cadastrados
-                        <span className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                          {allJobs.length}
-                        </span>
-                      </p>
-                      <div className="space-y-1">
-                        {allJobs.map(j => (
-                          <div key={j.id} className="text-xs text-slate-600">
-                            <span className="font-semibold text-slate-700">Tipo {j.id}:</span>{' '}
-                            <span className="text-slate-500">{j.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -534,7 +520,7 @@ export function AgentView() {
                 Salvar Instruções
               </button>
               <button
-                onClick={() => setSystemPrompt(allJobs.length > 0 ? buildPromptFromJobs(allJobs) : DEFAULT_SYSTEM_PROMPT)}
+                onClick={() => setSystemPrompt(DEFAULT_SYSTEM_PROMPT)}
                 className="w-full mt-2 text-xs text-slate-400 hover:text-slate-600 font-medium py-2 transition-colors"
               >
                 Resetar para padrão
@@ -544,39 +530,28 @@ export function AgentView() {
         </div>
       )}
 
-      {/* Header */}
       <div className="bg-slate-50 border-b border-slate-200 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-blue-100 p-2 rounded-full">
             <Bot className="w-5 h-5 text-blue-700" />
           </div>
           <div>
-            <h2 className="font-semibold text-slate-800">Agente de IA de Jobs</h2>
-            <p className="text-xs text-slate-500">DATAPREV — Automação de Workloads</p>
+            <h2 className="font-semibold text-slate-800">Agente de IA (Hudson Virtual)</h2>
+            <p className="text-xs text-slate-500">Assistente de preenchimento de Jobs</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRestart}
-            className="p-2 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg transition-all"
-            title="Nova conversa"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-2 hover:bg-slate-200 text-slate-500 rounded-lg transition-all flex items-center gap-2 text-sm font-medium"
-            title="Configurar Comportamento"
-          >
-            <Settings2 className="w-5 h-5" />
-            <span className="hidden md:inline">Instruções</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="p-2 hover:bg-slate-200 text-slate-500 rounded-lg transition-all flex items-center gap-2 text-sm font-medium"
+          title="Configurar Comportamento"
+        >
+          <Settings2 className="w-5 h-5" />
+          <span className="hidden md:inline">Instruções</span>
+        </button>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {messages.map(msg => (
+        {messages.map((msg) => (
           <div
             key={msg.id}
             className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}
@@ -597,6 +572,7 @@ export function AgentView() {
                   : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-sm'
               }`}
             >
+              {msg.isError && <AlertCircle className="w-4 h-4 inline-block mr-2 mb-0.5" />}
               {typeof msg.text === 'string' ? (
                 <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
               ) : (
@@ -605,7 +581,6 @@ export function AgentView() {
             </div>
           </div>
         ))}
-
         {isLoading && (
           <div className="flex gap-3 animate-pulse">
             <div className="shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
@@ -620,30 +595,32 @@ export function AgentView() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div className="p-4 bg-white border-t border-slate-200">
         <div className="flex gap-2">
           <input
             type="text"
             value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSend()}
-            placeholder={isLoading ? 'Agente está pensando...' : 'Digite sua mensagem...'}
-            disabled={isLoading}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder={
+              isLoading
+                ? 'Hudson está pensando...'
+                : isDone
+                ? 'Checklist concluído.'
+                : 'Digite sua resposta...'
+            }
+            disabled={isLoading || isDone}
             className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all disabled:opacity-50"
           />
           <button
             onClick={handleSend}
-            disabled={!inputValue.trim() || isLoading}
+            disabled={!inputValue.trim() || isLoading || isDone}
             className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:hover:bg-blue-600 flex items-center gap-2 font-medium"
           >
             <span>{isLoading ? '...' : 'Enviar'}</span>
             {!isLoading && <Send className="w-4 h-4" />}
           </button>
         </div>
-        <p className="text-xs text-slate-400 mt-2 text-center">
-          Digite <span className="font-semibold text-slate-500">novo</span> para reiniciar a conversa
-        </p>
       </div>
     </div>
   );

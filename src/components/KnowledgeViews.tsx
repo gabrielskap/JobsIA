@@ -4,7 +4,7 @@ import { norms } from '../data/knowledgeBase';
 import { dictionaryService } from '../services/dictionaryService';
 import { normService } from '../services/normService';
 import { jobService } from '../services/jobService';
-import type { DictionaryTerm, NormRule, JobTypeWithParameters, ParameterType } from '../types/database';
+import type { DictionaryTerm, NormRule, JobTypeWithParameters } from '../types/database';
 
 const NORMS_TITLE = norms.title;
 
@@ -203,16 +203,9 @@ export function DictionaryView() {
 export function NormsView() {
   const [rules, setRules] = useState<NormRule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ environment: '', rule: '' });
-
-  const loadRules = async () => {
-    const data = await normService.getAll();
-    setRules(data);
-  };
 
   useEffect(() => {
     normService.seedIfEmpty().then(() =>
@@ -227,30 +220,16 @@ export function NormsView() {
     e.preventDefault();
     if (!formData.environment.trim() || !formData.rule.trim()) return;
 
-    setSaving(true);
-    setError(null);
-
     if (editingId !== null) {
       const updated = await normService.update(editingId, formData);
-      if (updated) {
-        setRules(prev => prev.map(r => r.id === editingId ? updated : r));
-        setEditingId(null);
-        setFormData({ environment: '', rule: '' });
-      } else {
-        setError('Erro ao atualizar a regra. Verifique o console para detalhes.');
-      }
+      if (updated) setRules(prev => prev.map(r => r.id === editingId ? updated : r));
+      setEditingId(null);
     } else {
-      const { data: created, error: createError } = await normService.create(formData);
-      if (created) {
-        await loadRules();
-        setIsAdding(false);
-        setFormData({ environment: '', rule: '' });
-      } else {
-        setError(`Erro ao salvar: ${createError ?? 'erro desconhecido'}`);
-      }
+      const created = await normService.create(formData);
+      if (created) setRules(prev => [...prev, created]);
+      setIsAdding(false);
     }
-
-    setSaving(false);
+    setFormData({ environment: '', rule: '' });
   };
 
   const startEdit = (rule: NormRule) => {
@@ -280,7 +259,6 @@ export function NormsView() {
           onClick={() => {
             setIsAdding(!isAdding);
             setEditingId(null);
-            setError(null);
             setFormData({ environment: '', rule: '' });
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
@@ -306,17 +284,14 @@ export function NormsView() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="md:col-span-1 space-y-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Ambiente</label>
-              <select
+              <input
                 required
+                type="text"
                 value={formData.environment}
                 onChange={(e) => setFormData({ ...formData, environment: e.target.value })}
+                placeholder="Ex: Mainframe"
                 className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-              >
-                <option value="">Selecione...</option>
-                <option value="Geral">Geral</option>
-                <option value="UNIX / LINUX">UNIX / LINUX</option>
-                <option value="Windows">Windows</option>
-              </select>
+              />
             </div>
             <div className="md:col-span-2 space-y-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Regra de Validação</label>
@@ -330,30 +305,21 @@ export function NormsView() {
               />
             </div>
           </div>
-          {error && (
-            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              {error}
-            </div>
-          )}
           <div className="flex gap-3">
             <button
               type="submit"
-              disabled={saving}
-              className="flex-1 bg-emerald-600 text-white font-semibold py-2.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 bg-emerald-600 text-white font-semibold py-2.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20"
             >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {editingId !== null ? 'Atualizar Regra' : 'Salvar Nova Regra'}
             </button>
             {editingId !== null && (
               <button
                 type="button"
-                disabled={saving}
                 onClick={() => {
                   setEditingId(null);
-                  setError(null);
                   setFormData({ environment: '', rule: '' });
                 }}
-                className="px-6 bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg hover:bg-slate-300 transition-colors disabled:opacity-60"
+                className="px-6 bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg hover:bg-slate-300 transition-colors"
               >
                 Cancelar
               </button>
@@ -417,26 +383,12 @@ export function JobsView() {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  type ParamForm = {
-    flag: string;
-    name: string;
-    required: boolean;
-    description: string;
-    parameter_type: ParameterType;
-    order_index: number;
-    data_type: string;
-    default_value: string;
-    example_value: string;
-    validation_regex: string;
-    active: boolean;
-  };
-
   const [formData, setFormData] = useState({
     id: '',
     name: '',
     script: '',
     description: '',
-    parameters: [] as ParamForm[],
+    parameters: [] as { flag: string; name: string; required: boolean; description: string }[],
   });
 
   useEffect(() => {
@@ -467,13 +419,7 @@ export function JobsView() {
       const updated = await jobService.update(
         editingId,
         { id: jobId, name: formData.name, script: formData.script, description: formData.description },
-        formData.parameters.map(p => ({
-          ...p,
-          flag: p.parameter_type === 'flag' ? (p.flag || null) : null,
-          default_value: p.default_value || null,
-          example_value: p.example_value || null,
-          validation_regex: p.validation_regex || null,
-        }))
+        formData.parameters
       );
       if (updated) setJobsData(prev => prev.map(j => j.id === editingId ? updated : j));
       setEditingId(null);
@@ -484,13 +430,7 @@ export function JobsView() {
       }
       const created = await jobService.create(
         { id: jobId, name: formData.name, script: formData.script, description: formData.description },
-        formData.parameters.map(p => ({
-          ...p,
-          flag: p.parameter_type === 'flag' ? (p.flag || null) : null,
-          default_value: p.default_value || null,
-          example_value: p.example_value || null,
-          validation_regex: p.validation_regex || null,
-        }))
+        formData.parameters
       );
       if (created) setJobsData(prev => [...prev, created]);
       setIsAdding(false);
@@ -504,18 +444,11 @@ export function JobsView() {
       name: job.name,
       script: job.script,
       description: job.description,
-      parameters: job.parameters.map((p, i) => ({
-        flag: p.flag ?? '',
+      parameters: job.parameters.map(p => ({
+        flag: p.flag,
         name: p.name,
         required: p.required,
         description: p.description,
-        parameter_type: p.parameter_type,
-        order_index: p.order_index ?? i,
-        data_type: p.data_type ?? 'text',
-        default_value: p.default_value ?? '',
-        example_value: p.example_value ?? '',
-        validation_regex: p.validation_regex ?? '',
-        active: p.active ?? true,
       })),
     });
     setEditingId(job.id);
@@ -531,16 +464,7 @@ export function JobsView() {
   const addParameter = () => {
     setFormData({
       ...formData,
-      parameters: [...formData.parameters, {
-        flag: '', name: '', required: true, description: '',
-        parameter_type: 'flag' as ParameterType,
-        order_index: formData.parameters.length,
-        data_type: 'text',
-        default_value: '',
-        example_value: '',
-        validation_regex: '',
-        active: true,
-      }],
+      parameters: [...formData.parameters, { flag: '', name: '', required: true, description: '' }],
     });
   };
 
@@ -658,139 +582,52 @@ export function JobsView() {
               {formData.parameters.map((param, idx) => (
                 <div
                   key={idx}
-                  className={`bg-white rounded-lg border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200 ${!param.active ? 'opacity-60' : ''}`}
+                  className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col md:flex-row gap-3 items-start animate-in zoom-in-95 duration-200"
                 >
-                  {/* Linha principal */}
-                  <div className="p-3 flex flex-col md:flex-row gap-3 items-start">
-                    {/* Tipo do parâmetro */}
-                    <div className="w-28 shrink-0">
-                      <select
-                        value={param.parameter_type}
-                        onChange={(e) => updateParameter(idx, 'parameter_type', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                        title="Tipo do parâmetro"
-                      >
-                        <option value="flag">flag</option>
-                        <option value="positional">positional</option>
-                        <option value="internal">internal</option>
-                        <option value="generated">generated</option>
-                      </select>
-                    </div>
-                    {/* Flag CLI */}
-                    <div className={`w-20 shrink-0 ${param.parameter_type !== 'flag' ? 'opacity-30 pointer-events-none' : ''}`}>
-                      <input
-                        type="text"
-                        value={param.flag}
-                        onChange={(e) => updateParameter(idx, 'flag', e.target.value)}
-                        placeholder="-x"
-                        disabled={param.parameter_type !== 'flag'}
-                        className="w-full px-2 py-1.5 text-xs font-mono font-bold bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="w-40 shrink-0">
-                      <input
-                        type="text"
-                        value={param.name}
-                        onChange={(e) => updateParameter(idx, 'name', e.target.value)}
-                        placeholder="Nome amigável"
-                        className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <input
-                        type="text"
-                        value={param.description}
-                        onChange={(e) => updateParameter(idx, 'description', e.target.value)}
-                        placeholder="Descrição do parâmetro"
-                        className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0 h-8 self-center">
-                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={param.required}
-                          onChange={(e) => updateParameter(idx, 'required', e.target.checked)}
-                          className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Obrig.</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => removeParameter(idx)}
-                        className="p-1 text-slate-300 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                  <div className="w-20 shrink-0">
+                    <input
+                      type="text"
+                      value={param.flag}
+                      onChange={(e) => updateParameter(idx, 'flag', e.target.value)}
+                      placeholder="Flag"
+                      className="w-full px-2 py-1.5 text-xs font-mono font-bold bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    />
                   </div>
-                  {/* Linha secundária — campos estendidos */}
-                  <div className="border-t border-slate-100 bg-slate-50/50 px-3 py-2 flex flex-wrap gap-3 items-center">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ordem</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={param.order_index}
-                        onChange={(e) => updateParameter(idx, 'order_index', e.target.value)}
-                        className="w-14 px-2 py-1 text-xs bg-white border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tipo dado</span>
-                      <select
-                        value={param.data_type}
-                        onChange={(e) => updateParameter(idx, 'data_type', e.target.value)}
-                        className="px-2 py-1 text-xs bg-white border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                      >
-                        <option value="text">text</option>
-                        <option value="number">number</option>
-                        <option value="date">date</option>
-                        <option value="datetime">datetime</option>
-                        <option value="boolean">boolean</option>
-                        <option value="path">path</option>
-                        <option value="list">list</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-1 min-w-[120px]">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Default</span>
-                      <input
-                        type="text"
-                        value={param.default_value}
-                        onChange={(e) => updateParameter(idx, 'default_value', e.target.value)}
-                        placeholder="valor padrão"
-                        className="w-full px-2 py-1 text-xs font-mono bg-white border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-1 min-w-[120px]">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Exemplo</span>
-                      <input
-                        type="text"
-                        value={param.example_value}
-                        onChange={(e) => updateParameter(idx, 'example_value', e.target.value)}
-                        placeholder="ex: /caminho/arquivo"
-                        className="w-full px-2 py-1 text-xs font-mono bg-white border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-1 min-w-[120px]">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Regex</span>
-                      <input
-                        type="text"
-                        value={param.validation_regex}
-                        onChange={(e) => updateParameter(idx, 'validation_regex', e.target.value)}
-                        placeholder="^[A-Z].*"
-                        className="w-full px-2 py-1 text-xs font-mono bg-white border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                      />
-                    </div>
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none ml-auto">
+                  <div className="w-40 shrink-0">
+                    <input
+                      type="text"
+                      value={param.name}
+                      onChange={(e) => updateParameter(idx, 'name', e.target.value)}
+                      placeholder="Nome amigável"
+                      className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={param.description}
+                      onChange={(e) => updateParameter(idx, 'description', e.target.value)}
+                      placeholder="Descrição do parâmetro"
+                      className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-purple-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 shrink-0 h-8 self-center">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
                       <input
                         type="checkbox"
-                        checked={param.active}
-                        onChange={(e) => updateParameter(idx, 'active', e.target.checked)}
+                        checked={param.required}
+                        onChange={(e) => updateParameter(idx, 'required', e.target.checked)}
                         className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                       />
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Ativo</span>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Obrig.</span>
                     </label>
+                    <button
+                      type="button"
+                      onClick={() => removeParameter(idx)}
+                      className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -864,67 +701,24 @@ export function JobsView() {
                   <Database className="w-4 h-4" /> Parâmetros do Script
                 </h4>
                 <div className="grid gap-3">
-                  {job.parameters?.map((param, idx) => {
-                    const typeBadgeClass: Record<string, string> = {
-                      flag:      'bg-purple-50 text-purple-700 border-purple-100',
-                      positional:'bg-blue-50   text-blue-700   border-blue-100',
-                      internal:  'bg-slate-100 text-slate-500  border-slate-200',
-                      generated: 'bg-amber-50  text-amber-700  border-amber-100',
-                    };
-                    return (
-                      <div key={idx} className={`flex items-start gap-3 text-sm bg-slate-50 p-3 rounded-lg border border-slate-100 ${param.active === false ? 'opacity-50' : ''}`}>
-                        <div className="flex flex-col items-center gap-1 shrink-0">
-                          {param.flag ? (
-                            <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border shadow-sm">
-                              {param.flag}
-                            </span>
+                  {job.parameters?.map((param, idx) => (
+                    <div key={idx} className="flex items-start gap-3 text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border shadow-sm">
+                        {param.flag}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-700">{param.name}</span>
+                          {param.required ? (
+                            <span className="text-[10px] uppercase tracking-wider font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Obrigatório</span>
                           ) : (
-                            <span className="font-mono text-slate-400 bg-white px-2 py-0.5 rounded border border-dashed shadow-sm text-xs">
-                              —
-                            </span>
-                          )}
-                          <span className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border ${typeBadgeClass[param.parameter_type] ?? typeBadgeClass.flag}`}>
-                            {param.parameter_type}
-                          </span>
-                          {param.data_type && param.data_type !== 'text' && (
-                            <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border bg-teal-50 text-teal-700 border-teal-100">
-                              {param.data_type}
-                            </span>
+                            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Opcional</span>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-slate-700">{param.name}</span>
-                            {param.required ? (
-                              <span className="text-[10px] uppercase tracking-wider font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Obrigatório</span>
-                            ) : (
-                              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Opcional</span>
-                            )}
-                            {param.active === false && (
-                              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">Inativo</span>
-                            )}
-                          </div>
-                          <p className="text-slate-500 mt-1">{param.description}</p>
-                          {(param.default_value || param.example_value) && (
-                            <div className="flex gap-3 mt-1.5 flex-wrap">
-                              {param.default_value && (
-                                <span className="text-[10px] text-slate-500">
-                                  <span className="font-bold">default:</span>{' '}
-                                  <code className="font-mono bg-white px-1 py-0.5 rounded border border-slate-200">{param.default_value}</code>
-                                </span>
-                              )}
-                              {param.example_value && (
-                                <span className="text-[10px] text-slate-500">
-                                  <span className="font-bold">ex:</span>{' '}
-                                  <code className="font-mono bg-white px-1 py-0.5 rounded border border-slate-200">{param.example_value}</code>
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        <p className="text-slate-500 mt-1">{param.description}</p>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                   {(!job.parameters || job.parameters.length === 0) && (
                     <div className="text-xs text-slate-400 italic">Sem parâmetros definidos.</div>
                   )}

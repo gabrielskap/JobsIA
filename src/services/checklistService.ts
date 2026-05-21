@@ -4,10 +4,11 @@ import type { Checklist } from '../types/database';
 const TABLE = 'JobsIA_checklists';
 
 export const checklistService = {
-  async getAll(userId?: string): Promise<Checklist[]> {
-    let query = supabase.from(TABLE).select('*').order('created_at', { ascending: false });
-    if (userId) query = query.eq('user_id', userId);
-    const { data, error } = await query;
+  async getAll(): Promise<Checklist[]> {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .order('created_at', { ascending: false });
     if (error) { console.error('checklistService.getAll:', error); return []; }
     return data ?? [];
   },
