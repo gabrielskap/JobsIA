@@ -1,56 +1,55 @@
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import type { DictionaryTerm } from '../types/database';
 import { dictionary as initialDictionary } from '../data/knowledgeBase';
 
-const TABLE = 'JobsIA_dictionary_terms';
-
 export const dictionaryService = {
   async getAll(): Promise<DictionaryTerm[]> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select('*')
-      .order('created_at', { ascending: true });
-    if (error) { console.error('dictionaryService.getAll:', error); return []; }
-    return data ?? [];
+    try {
+      return await api.get<DictionaryTerm[]>('/dictionary');
+    } catch (err) {
+      console.error('dictionaryService.getAll:', err);
+      return [];
+    }
   },
 
   async create(term: Omit<DictionaryTerm, 'id' | 'created_at'>): Promise<DictionaryTerm | null> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .insert(term)
-      .select()
-      .single();
-    if (error) { console.error('dictionaryService.create:', error); return null; }
-    return data;
+    try {
+      return await api.post<DictionaryTerm>('/dictionary', term);
+    } catch (err) {
+      console.error('dictionaryService.create:', err);
+      return null;
+    }
   },
 
   async update(id: string, updates: Partial<Omit<DictionaryTerm, 'id' | 'created_at'>>): Promise<DictionaryTerm | null> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) { console.error('dictionaryService.update:', error); return null; }
-    return data;
+    try {
+      return await api.put<DictionaryTerm>(`/dictionary/${id}`, updates);
+    } catch (err) {
+      console.error('dictionaryService.update:', err);
+      return null;
+    }
   },
 
   async remove(id: string): Promise<boolean> {
-    const { error } = await supabase.from(TABLE).delete().eq('id', id);
-    if (error) { console.error('dictionaryService.remove:', error); return false; }
-    return true;
+    try {
+      await api.delete(`/dictionary/${id}`);
+      return true;
+    } catch (err) {
+      console.error('dictionaryService.remove:', err);
+      return false;
+    }
   },
 
   async seedIfEmpty(): Promise<void> {
-    const { count, error } = await supabase
-      .from(TABLE)
-      .select('*', { count: 'exact', head: true });
-    if (error || (count ?? 0) > 0) return;
-    const rows = initialDictionary.map(d => ({
-      term: d.term,
-      definition: d.definition,
-      category: d.category,
-    }));
-    await supabase.from(TABLE).insert(rows);
+    try {
+      const items = initialDictionary.map(d => ({
+        term: d.term,
+        definition: d.definition,
+        category: d.category,
+      }));
+      await api.post('/dictionary/seed', { items });
+    } catch (err) {
+      console.error('dictionaryService.seedIfEmpty:', err);
+    }
   },
 };

@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Bot } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
+import { useAuth, type AuthUser } from '../contexts/AuthContext';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -9,18 +10,21 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (authError) {
-      setError(authError.message);
-      return;
+    try {
+      const { token, user } = await api.post<{ token: string; user: AuthUser }>('/auth/login', { email, password });
+      login(user, token);
+      navigate('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao fazer login');
+    } finally {
+      setLoading(false);
     }
-    navigate('/');
   }
 
   return (

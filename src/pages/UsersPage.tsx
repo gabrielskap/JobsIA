@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Users } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import type { Profile } from '../types/database';
 
 export default function UsersPage() {
@@ -9,15 +9,10 @@ export default function UsersPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    supabase
-      .from('JobsIA_profiles')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .then(({ data, error: err }) => {
-        if (err) setError(err.message);
-        else setUsers(data ?? []);
-        setLoading(false);
-      });
+    api.get<Profile[]>('/users')
+      .then(data => setUsers(data))
+      .catch(err => setError(err instanceof Error ? err.message : 'Erro ao buscar usuários'))
+      .finally(() => setLoading(false));
   }, []);
 
   return (

@@ -1,4 +1,4 @@
-// Tipos TypeScript espelhando o schema do Supabase após a migration rename_tables.sql
+// Tipos TypeScript espelhando o schema do banco PostgreSQL
 
 export interface Profile {
   id: string;

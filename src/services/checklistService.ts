@@ -1,24 +1,23 @@
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import type { Checklist } from '../types/database';
-
-const TABLE = 'JobsIA_checklists';
 
 export const checklistService = {
   async getAll(userId?: string): Promise<Checklist[]> {
-    let query = supabase.from(TABLE).select('*').order('created_at', { ascending: false });
-    if (userId) query = query.eq('user_id', userId);
-    const { data, error } = await query;
-    if (error) { console.error('checklistService.getAll:', error); return []; }
-    return data ?? [];
+    try {
+      const qs = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+      return await api.get<Checklist[]>(`/checklists${qs}`);
+    } catch (err) {
+      console.error('checklistService.getAll:', err);
+      return [];
+    }
   },
 
   async create(checklist: Omit<Checklist, 'id' | 'created_at'>): Promise<Checklist | null> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .insert(checklist)
-      .select()
-      .single();
-    if (error) { console.error('checklistService.create:', error); return null; }
-    return data;
+    try {
+      return await api.post<Checklist>('/checklists', checklist);
+    } catch (err) {
+      console.error('checklistService.create:', err);
+      return null;
+    }
   },
 };

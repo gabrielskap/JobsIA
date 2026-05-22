@@ -1,54 +1,27 @@
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import type { JobType, JobParameter, JobTypeWithParameters } from '../types/database';
 import { jobs as initialJobs } from '../data/knowledgeBase';
 
-const TYPES_TABLE = 'JobsIA_types';
-const PARAMS_TABLE = 'JobsIA_parameters';
-
 export const jobService = {
   async getAll(): Promise<JobTypeWithParameters[]> {
-    const { data: types, error: typesError } = await supabase
-      .from(TYPES_TABLE)
-      .select('*')
-      .order('id', { ascending: true });
-    if (typesError) { console.error('jobService.getAll types:', typesError); return []; }
-
-    const { data: params, error: paramsError } = await supabase
-      .from(PARAMS_TABLE)
-      .select('*')
-      .order('job_type_id', { ascending: true })
-      .order('order_index', { ascending: true });
-    if (paramsError) { console.error('jobService.getAll params:', paramsError); return []; }
-
-    return (types ?? []).map(type => ({
-      ...type,
-      parameters: (params ?? []).filter(p => p.job_type_id === type.id),
-    }));
+    try {
+      return await api.get<JobTypeWithParameters[]>('/jobs');
+    } catch (err) {
+      console.error('jobService.getAll:', err);
+      return [];
+    }
   },
 
   async create(
     job: Omit<JobType, 'created_at'>,
     parameters: Omit<JobParameter, 'id' | 'job_type_id'>[]
   ): Promise<JobTypeWithParameters | null> {
-    const { data: createdJob, error: jobError } = await supabase
-      .from(TYPES_TABLE)
-      .insert({ id: job.id, name: job.name, script: job.script, description: job.description })
-      .select()
-      .single();
-    if (jobError) { console.error('jobService.create job:', jobError); return null; }
-
-    if (parameters.length > 0) {
-      const rows = parameters.map(p => ({ ...p, job_type_id: createdJob.id }));
-      const { error: paramsError } = await supabase.from(PARAMS_TABLE).insert(rows);
-      if (paramsError) console.error('jobService.create params:', paramsError);
+    try {
+      return await api.post<JobTypeWithParameters>('/jobs', { job, parameters });
+    } catch (err) {
+      console.error('jobService.create:', err);
+      return null;
     }
-
-    const { data: createdParams } = await supabase
-      .from(PARAMS_TABLE)
-      .select('*')
-      .eq('job_type_id', createdJob.id);
-
-    return { ...createdJob, parameters: createdParams ?? [] };
   },
 
   async update(
@@ -56,69 +29,48 @@ export const jobService = {
     job: Partial<Omit<JobType, 'created_at'>>,
     parameters: Omit<JobParameter, 'id' | 'job_type_id'>[]
   ): Promise<JobTypeWithParameters | null> {
-    const newId = job.id ?? id;
-
-    // Deletar parâmetros antes para liberar a FK do id antigo
-    await supabase.from(PARAMS_TABLE).delete().eq('job_type_id', id);
-
-    const { data: updatedJob, error: jobError } = await supabase
-      .from(TYPES_TABLE)
-      .update(job)
-      .eq('id', id)
-      .select()
-      .single();
-    if (jobError) { console.error('jobService.update job:', jobError); return null; }
-
-    if (parameters.length > 0) {
-      const rows = parameters.map(p => ({ ...p, job_type_id: newId }));
-      const { error: paramsError } = await supabase.from(PARAMS_TABLE).insert(rows);
-      if (paramsError) console.error('jobService.update params:', paramsError);
+    try {
+      return await api.put<JobTypeWithParameters>(`/jobs/${id}`, { job, parameters });
+    } catch (err) {
+      console.error('jobService.update:', err);
+      return null;
     }
-
-    const { data: updatedParams } = await supabase
-      .from(PARAMS_TABLE)
-      .select('*')
-      .eq('job_type_id', newId);
-
-    return { ...updatedJob, parameters: updatedParams ?? [] };
   },
 
   async remove(id: number): Promise<boolean> {
-    // Parâmetros devem cascadear via FK; se não tiver CASCADE, deletar manualmente
-    await supabase.from(PARAMS_TABLE).delete().eq('job_type_id', id);
-    const { error } = await supabase.from(TYPES_TABLE).delete().eq('id', id);
-    if (error) { console.error('jobService.remove:', error); return false; }
-    return true;
+    try {
+      await api.delete(`/jobs/${id}`);
+      return true;
+    } catch (err) {
+      console.error('jobService.remove:', err);
+      return false;
+    }
   },
 
   async seedIfEmpty(): Promise<void> {
-    const { count, error } = await supabase
-      .from(TYPES_TABLE)
-      .select('*', { count: 'exact', head: true });
-    if (error || (count ?? 0) > 0) return;
-
-    for (const job of initialJobs) {
-      const { data: createdJob, error: jobError } = await supabase
-        .from(TYPES_TABLE)
-        .insert({ id: job.id, name: job.name, script: job.script, description: job.description })
-        .select()
-        .single();
-      if (jobError) { console.error('jobService.seedIfEmpty job:', jobError); continue; }
-
-      if (job.parameters.length > 0) {
-        const rows = job.parameters.map((p, i) => ({
-          job_type_id: createdJob.id,
-          flag: p.flag ?? null,
-          name: p.name,
-          required: p.required,
-          description: p.description,
-          parameter_type: p.parameter_type ?? 'flag',
-          order_index: i,
-          data_type: 'text',
-          active: true,
-        }));
-        await supabase.from(PARAMS_TABLE).insert(rows);
+    try {
+      const { seeded } = await api.post<{ seeded: boolean }>('/jobs/seed');
+      if (!seeded) return;
+      for (const job of initialJobs) {
+        await jobService.create(
+          { id: job.id, name: job.name, script: job.script, description: job.description },
+          job.parameters.map((p, i) => ({
+            flag: p.flag ?? null,
+            name: p.name,
+            required: p.required,
+            description: p.description,
+            parameter_type: p.parameter_type ?? 'flag',
+            order_index: i,
+            data_type: 'text',
+            default_value: null,
+            example_value: null,
+            validation_regex: null,
+            active: true,
+          }))
+        );
       }
+    } catch (err) {
+      console.error('jobService.seedIfEmpty:', err);
     }
   },
 };

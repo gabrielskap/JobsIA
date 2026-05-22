@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Bot } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -15,22 +15,14 @@ export default function SignupPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
-    const { error: signUpError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { name },
-    });
-
-    if (signUpError) {
-      setError(signUpError.message);
+    try {
+      await api.post('/auth/signup', { name, email, password });
+      navigate('/login');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao criar conta');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setLoading(false);
-    navigate('/login');
   }
 
   return (
