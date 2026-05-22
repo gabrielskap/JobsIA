@@ -4,7 +4,7 @@ import {
   Settings2, X, Save, MessageSquare, BookOpen, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
 import { createChecklistPDF } from '../utils/pdfGenerator';
-import { GoogleGenAI } from "@google/genai";
+import { api } from '../lib/api';
 import { systemPromptService } from '../services/systemPromptService';
 import { checklistService } from '../services/checklistService';
 import { jobService } from '../services/jobService';
@@ -64,7 +64,8 @@ const DEFAULT_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + PROMPT_SUFFIX;
 // ── FUNCTION DECLARATION ─────────────────────────────────────────────────────
 
 const GENERATE_CHECKLIST_TOOL = {
-  functionDeclarations: [{
+  type: 'function' as const,
+  function: {
     name: 'generate_checklist',
     description:
       'Gera o checklist PDF com os dados coletados. ' +
@@ -88,37 +89,8 @@ const GENERATE_CHECKLIST_TOOL = {
       },
       required: ['job_type_id', 'job_name', 'collected_data'],
     },
-  }],
+  },
 };
-
-// ── MODEL DISCOVERY ──────────────────────────────────────────────────────────
-
-const DEFAULT_MODEL = 'gemini-2.5-flash';
-
-async function discoverBestModel(apiKey: string): Promise<string> {
-  const PREFERRED = ['3.5-flash', '3.1-flash', '3-flash', '2.5-flash', '2.0-flash', 'flash'];
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=50`
-    );
-    if (!res.ok) return DEFAULT_MODEL;
-    const data = await res.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
-    const available = (data.models ?? [])
-      .filter(m => (m.supportedGenerationMethods ?? []).includes('generateContent'))
-      .map(m => m.name.replace('models/', ''))
-      .filter(n => !n.includes('embed') && !n.includes('tts') && !n.includes('image') &&
-                   !n.includes('preview') && !n.includes('vision') && !n.includes('robotics') &&
-                   !n.includes('research') && !n.includes('nano') && !n.includes('lyria') &&
-                   !n.includes('gemma'));
-    for (const pref of PREFERRED) {
-      const match = available.find(n => n.includes(pref));
-      if (match) return match;
-    }
-    return available[0] ?? DEFAULT_MODEL;
-  } catch {
-    return DEFAULT_MODEL;
-  }
-}
 
 // ── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -129,8 +101,26 @@ type Message = {
   isError?: boolean;
 };
 
-type ChatPart = Record<string, unknown>;
-type ChatMessage = { role: 'user' | 'model'; parts: ChatPart[] };
+type ToolCall = {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+};
+
+type ChatMessage =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string };
+
+type LIAResponse = {
+  choices: Array<{
+    message: {
+      role: 'assistant';
+      content: string | null;
+      tool_calls?: ToolCall[];
+    };
+  }>;
+};
 
 // ── COMPONENT ────────────────────────────────────────────────────────────────
 
@@ -150,9 +140,6 @@ export function AgentView() {
   const [allJobs, setAllJobs] = useState<JobTypeWithParameters[]>([]);
   const [isKnowledgeExpanded, setIsKnowledgeExpanded] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [geminiModel, setGeminiModel] = useState<string>(
-    import.meta.env.VITE_GEMINI_MODEL ?? DEFAULT_MODEL
-  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -167,16 +154,6 @@ export function AgentView() {
         if (!savedPrompt) setSystemPrompt(buildPromptFromJobs(loadedJobs));
       }
       if (savedPrompt) setSystemPrompt(savedPrompt);
-
-      // Auto-discover model if not set via env
-      const envModel = import.meta.env.VITE_GEMINI_MODEL ?? '';
-      if (!envModel) {
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY ?? '';
-        if (apiKey) {
-          const discovered = await discoverBestModel(apiKey);
-          if (discovered) setGeminiModel(discovered);
-        }
-      }
     }
     init();
   }, []);
@@ -291,88 +268,64 @@ export function AgentView() {
     addMessage('agent', resultNode);
   };
 
-  // ── GEMINI CALL ──────────────────────────────────────────────────────────────
+  // ── LIA API CALL ─────────────────────────────────────────────────────────────
 
-  const callGemini = async (input: string, history: ChatMessage[]) => {
+  const callLIA = async (input: string, history: ChatMessage[]) => {
     setIsLoading(true);
     let updatedHistory: ChatMessage[] = history;
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        addMessage(
-          'agent',
-          'Chave de API não configurada. Verifique o arquivo .env (VITE_GEMINI_API_KEY).',
-          true
-        );
-        return;
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
+      const newUserMsg: ChatMessage = { role: 'user', content: input };
+      const messages: ChatMessage[] = [...history, newUserMsg];
       const fullSystemPrompt = systemPrompt + buildKnowledgeContext();
 
-      const model = geminiModel || DEFAULT_MODEL;
-
-      const newUserMessage: ChatMessage = { role: 'user', parts: [{ text: input }] };
-      const contents: ChatMessage[] = [...history, newUserMessage];
-
-      const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-          systemInstruction: fullSystemPrompt,
-          tools: [GENERATE_CHECKLIST_TOOL],
-        },
+      const response = await api.post<LIAResponse>('/ai/chat', {
+        messages,
+        tools: [GENERATE_CHECKLIST_TOOL],
+        system: fullSystemPrompt,
       });
 
-      // Capture model content for history
-      const modelContent = response.candidates?.[0]?.content as ChatMessage | undefined;
-      updatedHistory = [...contents];
-      if (modelContent) updatedHistory.push(modelContent);
+      const assistantMsg = response.choices[0].message;
+      const assistantEntry: ChatMessage = {
+        role: 'assistant',
+        content: assistantMsg.content,
+        tool_calls: assistantMsg.tool_calls,
+      };
+      updatedHistory = [...messages, assistantEntry];
 
-      // Check for function calls
-      const functionCalls = (response as unknown as { functionCalls?: Array<{ name: string; args: Record<string, unknown> }> }).functionCalls;
-
-      if (functionCalls && functionCalls.length > 0) {
-        for (const fc of functionCalls) {
-          if (fc.name === 'generate_checklist') {
-            await handleGenerateChecklist(
-              fc.args as { job_type_id: number; job_name: string; collected_data: Record<string, string> }
-            );
-
-            // Send function response back to model for a natural follow-up
-            const funcResponseMsg: ChatMessage = {
-              role: 'user',
-              parts: [{
-                functionResponse: {
-                  name: 'generate_checklist',
-                  response: { success: true, message: 'Checklist gerado e disponível para download.' },
-                },
-              }],
+      if (assistantMsg.tool_calls?.length) {
+        for (const toolCall of assistantMsg.tool_calls) {
+          if (toolCall.function.name === 'generate_checklist') {
+            const args = JSON.parse(toolCall.function.arguments) as {
+              job_type_id: number;
+              job_name: string;
+              collected_data: Record<string, string>;
             };
-            updatedHistory.push(funcResponseMsg);
+            await handleGenerateChecklist(args);
 
-            const followUp = await ai.models.generateContent({
-              model,
-              contents: updatedHistory,
-              config: { systemInstruction: fullSystemPrompt },
+            const toolResultMsg: ChatMessage = {
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ success: true, message: 'Checklist gerado e disponível para download.' }),
+            };
+            updatedHistory.push(toolResultMsg);
+
+            const followUp = await api.post<LIAResponse>('/ai/chat', {
+              messages: updatedHistory,
+              system: fullSystemPrompt,
             });
 
-            const followUpText = followUp.text;
+            const followUpText = followUp.choices[0].message.content;
             if (followUpText) {
               addMessage('agent', followUpText);
-              updatedHistory.push({ role: 'model', parts: [{ text: followUpText }] });
+              updatedHistory.push({ role: 'assistant', content: followUpText });
             }
           }
         }
+      } else if (assistantMsg.content) {
+        addMessage('agent', assistantMsg.content);
       } else {
-        const text = response.text;
-        if (text) {
-          addMessage('agent', text);
-          if (!modelContent) updatedHistory.push({ role: 'model', parts: [{ text }] });
-        } else {
-          addMessage('agent', 'Desculpe, não consegui processar sua solicitação. Pode tentar novamente?', true);
-        }
+        addMessage('agent', 'Desculpe, não consegui processar sua solicitação. Pode tentar novamente?', true);
       }
     } catch (error) {
       console.error(error);
@@ -407,7 +360,7 @@ export function AgentView() {
     }
 
     const currentHistory = chatHistory;
-    setTimeout(() => callGemini(userInput, currentHistory), 400);
+    setTimeout(() => callLIA(userInput, currentHistory), 400);
   };
 
   // ── RENDER ────────────────────────────────────────────────────────────────────

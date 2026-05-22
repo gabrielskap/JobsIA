@@ -8,6 +8,7 @@ import normsRouter from './routes/norms';
 import dictionaryRouter from './routes/dictionary';
 import systemPromptsRouter from './routes/systemPrompts';
 import usersRouter from './routes/users';
+import aiRouter from './routes/ai';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -22,6 +23,7 @@ app.use('/api/norms', normsRouter);
 app.use('/api/dictionary', dictionaryRouter);
 app.use('/api/system-prompts', systemPromptsRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/ai', aiRouter);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
