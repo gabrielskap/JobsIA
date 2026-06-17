@@ -143,7 +143,7 @@ export default function UsersPage() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleCreateUser} className="p-6 flex flex-col gap-4">
+            <form onSubmit={handleCreateUser} className="p-6 flex flex-col gap-4" autoComplete="off">
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-slate-700" htmlFor="modal-name">Nome</label>
                 <input
@@ -154,6 +154,7 @@ export default function UsersPage() {
                   onChange={e => setName(e.target.value)}
                   className="px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Nome do usuário"
+                  autoComplete="off"
                 />
               </div>
 
@@ -167,6 +168,7 @@ export default function UsersPage() {
                   onChange={e => setEmail(e.target.value)}
                   className="px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="exemplo@email.com"
+                  autoComplete="off"
                 />
               </div>
 
@@ -181,6 +183,7 @@ export default function UsersPage() {
                   onChange={e => setPassword(e.target.value)}
                   className="px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Mínimo 6 caracteres"
+                  autoComplete="new-password"
                 />
               </div>
 
