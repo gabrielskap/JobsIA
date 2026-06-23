@@ -122,6 +122,23 @@ type LIAResponse = {
   }>;
 };
 
+// ── UTILS ────────────────────────────────────────────────────────────────────
+
+const formatMessageText = (text: string) => {
+  let processedText = text.replace(/---/g, '');
+  processedText = processedText.replace(/^-\s/gm, '• ');
+
+  if (!processedText.includes('**')) return processedText;
+  
+  const parts = processedText.split('**');
+  return parts.map((part, index) => {
+    if (index % 2 !== 0) {
+      return <strong key={index} className="font-bold">{part}</strong>;
+    }
+    return <span key={index}>{part}</span>;
+  });
+};
+
 // ── COMPONENT ────────────────────────────────────────────────────────────────
 
 export function AgentView() {
@@ -551,7 +568,7 @@ export function AgentView() {
               }`}
             >
               {typeof msg.text === 'string' ? (
-                <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                <div className="whitespace-pre-wrap leading-relaxed">{formatMessageText(msg.text)}</div>
               ) : (
                 msg.text
               )}
