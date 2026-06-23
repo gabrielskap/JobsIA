@@ -1,12 +1,17 @@
 import { useState, type FormEvent } from 'react';
-import { Bot } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth, type AuthUser } from '../contexts/AuthContext';
+
+function DataprevLogo() {
+  return <img src="/dataprev-logo.png" alt="Dataprev" className="w-64 h-auto" />;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -28,64 +33,94 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="bg-blue-600 p-3 rounded-2xl">
-            <Bot className="w-8 h-8 text-white" />
+    <div className="min-h-screen flex">
+      {/* Left panel */}
+      <div className="hidden md:flex w-1/2 bg-white items-center justify-center px-16">
+        <div className="max-w-sm flex flex-col items-start">
+          <DataprevLogo />
+          <div className="mt-8">
+            <h1 className="text-5xl font-black leading-tight">
+              <span className="text-slate-900">Jobs</span>
+              <span className="text-yellow-400">IA</span>
+            </h1>
+            <h2 className="text-4xl font-black text-blue-600 mt-1">Dataprev</h2>
+            <div className="w-10 h-1 bg-yellow-400 mt-4 mb-6" />
+            <p className="text-slate-600 text-base leading-relaxed">
+              Solução inteligente da Dataprev para apoiar a execução de Jobs, automatizando checklists,
+              organizando informações técnicas e gerando PDFs padronizados com mais eficiência e segurança operacional.
+            </p>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Jobs IA</h1>
-          <p className="text-sm text-slate-500">Faça login para continuar</p>
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700" htmlFor="email">E-mail</label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="seu@email.com"
-              autoComplete="email"
-            />
+      {/* Right panel */}
+      <div className="w-full md:w-1/2 bg-gray-100 flex items-center justify-center px-6 md:px-16">
+        <div className="w-full max-w-md">
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold text-slate-900">Acessar sistema</h2>
+            <p className="text-slate-500 mt-1">Entre com suas credenciais para continuar</p>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700" htmlFor="password">Senha</label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="••••••••"
-              autoComplete="current-password"
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col gap-5">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700" htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="seu.email@dataprev.com.br"
+                autoComplete="email"
+              />
+            </div>
 
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
-          )}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-medium text-slate-700" htmlFor="password">Senha</label>
+                <button type="button" className="text-sm text-blue-600 hover:underline">
+                  Esqueci minha senha
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-blue-600 text-white font-medium py-2.5 rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-60"
-          >
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
+            )}
 
-          <p className="text-center text-sm text-slate-500">
-            Não tem uma conta?{' '}
-            <Link to="/cadastro" className="text-blue-600 font-medium hover:underline">
-              Criar conta
-            </Link>
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-blue-600 text-white font-semibold py-3 rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-60"
+            >
+              {loading ? 'Entrando...' : 'Entrar'}
+            </button>
+          </form>
+
+          <p className="text-center text-sm text-slate-500 mt-6">
+            Sistema restrito a servidores autorizados.
           </p>
-        </form>
+        </div>
       </div>
     </div>
   );
