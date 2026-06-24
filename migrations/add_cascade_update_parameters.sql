@@ -1,6 +1,6 @@
 -- =============================================================================
 -- MIGRATION: Adicionar ON UPDATE CASCADE na FK de JobsIA_parameters.job_type_id
--- Banco: Supabase (PostgreSQL)
+-- Banco: PostgreSQL
 -- Data: 2026-05-14
 --
 -- Objetivo: quando o id de um tipo de job (JobsIA_types) for alterado,
@@ -19,7 +19,7 @@ BEGIN;
 ALTER TABLE "JobsIA_parameters"
   DROP CONSTRAINT IF EXISTS job_parameters_job_type_id_fkey;
 
--- Nome alternativo gerado pelo Supabase após o rename:
+-- Nome alternativo gerado após o rename:
 ALTER TABLE "JobsIA_parameters"
   DROP CONSTRAINT IF EXISTS "JobsIA_parameters_job_type_id_fkey";
 

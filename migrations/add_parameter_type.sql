@@ -1,5 +1,5 @@
 -- Suporte a tipos de parâmetros nos Jobs genéricos
--- Executar no Supabase SQL Editor
+-- Executar no SQL Editor
 
 -- 1. Adiciona coluna parameter_type com default 'flag' (compatível com dados existentes)
 ALTER TABLE "JobsIA_parameters"

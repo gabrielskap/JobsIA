@@ -1,0 +1,44 @@
+import { Router } from 'express';
+import { pool } from '../db';
+import { requireAuth } from '../middleware/auth';
+
+const router = Router();
+router.use(requireAuth);
+
+router.get('/active', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT content FROM "JobsIA_system_prompts"
+       WHERE is_active = true ORDER BY created_at DESC LIMIT 1`
+    );
+    res.json({ content: rows[0]?.content ?? null });
+  } catch (err) {
+    console.error('systemPrompts.getActive:', err);
+    res.status(500).json({ message: 'Erro ao buscar prompt' });
+  }
+});
+
+router.post('/', async (req, res) => {
+  const { content } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE "JobsIA_system_prompts" SET is_active = false WHERE is_active = true`
+    );
+    await client.query(
+      `INSERT INTO "JobsIA_system_prompts" (content, is_active) VALUES ($1, true)`,
+      [content]
+    );
+    await client.query('COMMIT');
+    res.status(201).json({ message: 'Prompt salvo' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('systemPrompts.save:', err);
+    res.status(500).json({ message: 'Erro ao salvar prompt' });
+  } finally {
+    client.release();
+  }
+});
+
+export default router;

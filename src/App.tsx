@@ -34,7 +34,10 @@ function AppLayout() {
               <Bot className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-xl leading-tight">Jobs IA</h1>
+              <h1 className="font-black text-xl leading-tight">
+                <span className="text-slate-900">Jobs</span>
+                <span className="text-yellow-400">IA</span>
+              </h1>
             </div>
           </div>
 
@@ -65,6 +68,14 @@ function AppLayout() {
         {/* Sidebar Navigation */}
         <aside className="w-full md:w-64 shrink-0">
           <nav className="flex flex-col gap-2 sticky top-24">
+            <div className="flex items-center justify-center px-4 py-3 mb-1 bg-white rounded-xl border border-slate-100 shadow-sm">
+              <img
+                src="/Dataprev logo.jpeg"
+                alt="Dataprev"
+                className="h-9 w-auto object-contain"
+              />
+            </div>
+
             {navItems.map(({ to, icon: Icon, label, activeClass }) => (
               <NavLink
                 key={to}
