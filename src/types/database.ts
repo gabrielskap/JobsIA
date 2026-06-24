@@ -17,12 +17,26 @@ export interface DictionaryTerm {
   created_at: string;
 }
 
-// Tabela: JobsIA_norm_rules
+// Tabela: JobsIA_norm_rules (agora mapeia a view/JobsIA_validation_rules)
 export interface NormRule {
   id: string;
   environment: string;
   rule: string;
   created_at: string;
+  status?: string;
+  version?: number;
+  previous_version_id?: string;
+  active?: boolean;
+  texto_orientacao?: string;
+  secao?: string;
+  codigo?: string;
+  campo_alvo?: string;
+  tipo_regra?: string;
+  severidade?: string;
+  mensagem?: string;
+  expressao?: string;
+  aplicabilidade_job?: number[];
+  casos_teste?: any;
 }
 
 // Tabela: JobsIA_types

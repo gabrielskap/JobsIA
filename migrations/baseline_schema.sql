@@ -75,13 +75,13 @@ CREATE TABLE IF NOT EXISTS "JobsIA_messages" (
 -- 7. Tabela: JobsIA_checklists (Checklists validados)
 CREATE TABLE IF NOT EXISTS "JobsIA_checklists" (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id UUID REFERENCES "JobsIA_conversations"(id) ON DELETE CASCADE,
+  conversation_id UUID REFERENCES "JobsIA_conversations"(id) ON DELETE SET NULL,
   type            TEXT NOT NULL,
-  data            JSONB NOT NULL DEFAULT '{}',
-  status          TEXT NOT NULL DEFAULT 'Concluído',
+  data            JSONB NOT NULL,
+  status          TEXT NOT NULL,
+  user_id         UUID REFERENCES users(id) ON DELETE SET NULL,
+  user_name       TEXT NOT NULL DEFAULT '',
   file_name       TEXT,
-  user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
-  user_name       TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   semantic_type   TEXT,
   job_type_id     INTEGER REFERENCES "JobsIA_types"(id) ON UPDATE CASCADE ON DELETE SET NULL,
@@ -89,7 +89,9 @@ CREATE TABLE IF NOT EXISTS "JobsIA_checklists" (
   request_id      TEXT UNIQUE,
   errors          JSONB DEFAULT '[]'::jsonb,
   warnings        JSONB DEFAULT '[]'::jsonb,
-  command         TEXT
+  command         TEXT,
+  applied_rules_snapshot JSONB DEFAULT NULL,
+  applied_rules_hash     TEXT DEFAULT NULL
 );
 
 -- 8. Tabela: JobsIA_dictionary_terms (Dicionário de Termos)
@@ -105,19 +107,7 @@ CREATE TABLE IF NOT EXISTS "JobsIA_dictionary_terms" (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 9. Tabela: JobsIA_norm_rules (Normas e Regras)
-CREATE TABLE IF NOT EXISTS "JobsIA_norm_rules" (
-  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  environment         TEXT NOT NULL,
-  rule                TEXT NOT NULL,
-  status              TEXT NOT NULL DEFAULT 'PUBLICADO',
-  version             INTEGER NOT NULL DEFAULT 1,
-  previous_version_id UUID REFERENCES "JobsIA_norm_rules"(id) ON DELETE SET NULL,
-  active              BOOLEAN NOT NULL DEFAULT true,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- 10. Tabela: JobsIA_system_prompts (Prompts de Sistema de IA)
+-- 9. Tabela: JobsIA_system_prompts (Prompts de Sistema de IA)
 CREATE TABLE IF NOT EXISTS "JobsIA_system_prompts" (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   content     TEXT NOT NULL DEFAULT '',
@@ -125,7 +115,7 @@ CREATE TABLE IF NOT EXISTS "JobsIA_system_prompts" (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 11. Tabela: JobsIA_audit_logs (Logs de Auditoria Administrativa)
+-- 10. Tabela: JobsIA_audit_logs (Logs de Auditoria Administrativa)
 CREATE TABLE IF NOT EXISTS "JobsIA_audit_logs" (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -135,7 +125,7 @@ CREATE TABLE IF NOT EXISTS "JobsIA_audit_logs" (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 12. Tabela: JobsIA_validation_rules (Regras de Validação Versionadas)
+-- 11. Tabela: JobsIA_validation_rules (Regras de Validação Versionadas)
 CREATE TABLE IF NOT EXISTS "JobsIA_validation_rules" (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   documento           TEXT NOT NULL DEFAULT 'N/PD/004/02',
@@ -154,8 +144,24 @@ CREATE TABLE IF NOT EXISTS "JobsIA_validation_rules" (
   previous_version_id UUID REFERENCES "JobsIA_validation_rules"(id) ON DELETE SET NULL,
   vigencia_inicio     TIMESTAMPTZ NOT NULL DEFAULT now(),
   vigencia_fim        TIMESTAMPTZ,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  texto_orientacao    TEXT NOT NULL DEFAULT '',
+  aplicabilidade_job  INTEGER[] DEFAULT NULL,
+  casos_teste         JSONB DEFAULT NULL
 );
+
+-- 12. View de compatibilidade JobsIA_norm_rules
+CREATE OR REPLACE VIEW "JobsIA_norm_rules" AS
+SELECT
+  id,
+  ambiente AS environment,
+  texto_orientacao AS rule,
+  created_at,
+  status,
+  version,
+  previous_version_id,
+  ativo AS active
+FROM "JobsIA_validation_rules";
 
 -- 13. Tabela: JobsIA_validation_runs (Execuções de Validação)
 CREATE TABLE IF NOT EXISTS "JobsIA_validation_runs" (

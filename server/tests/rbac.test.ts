@@ -207,7 +207,7 @@ test('Permissões - Deve permitir ADMIN de cadastrar novas normas', async () => 
   assert.strictEqual(res.body.rule, 'ADMIN_RULE_001');
 
   // Limpar a norma criada
-  await pool.query('DELETE FROM "JobsIA_norm_rules" WHERE id = $1', [res.body.id]);
+  await pool.query('DELETE FROM "JobsIA_validation_rules" WHERE id = $1', [res.body.id]);
 });
 
 test('Permissões - Deve permitir OPERADOR de ler normas (base de conhecimento)', async () => {
@@ -336,5 +336,5 @@ test('Auditoria - Deve salvar registros de auditoria no banco ao criar/alterar c
   assert.strictEqual(auditRes.rows[0].details.rule, 'AUDIT_RULE_999');
 
   // Limpar
-  await pool.query('DELETE FROM "JobsIA_norm_rules" WHERE id = $1', [createdNormId]);
+  await pool.query('DELETE FROM "JobsIA_validation_rules" WHERE id = $1', [createdNormId]);
 });

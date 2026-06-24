@@ -14,7 +14,7 @@ let operatorToken: string;
 test.before(async () => {
   // Limpar tabelas
   await pool.query('DELETE FROM "JobsIA_agent_executions"');
-  await pool.query('DELETE FROM "JobsIA_norm_rules" WHERE rule = $1', ['Regra de teste de integração para IA']);
+  await pool.query('DELETE FROM "JobsIA_validation_rules" WHERE rule = $1 OR texto_orientacao = $1', ['Regra de teste de integração para IA']);
   await pool.query('DELETE FROM "JobsIA_dictionary_terms" WHERE term = $1', ['TermoIntegracao']);
   await pool.query('DELETE FROM users WHERE email IN ($1, $2)', ['admin_integration@dataprev.gov.br', 'operator_integration@dataprev.gov.br']);
 
@@ -39,7 +39,7 @@ test.before(async () => {
 
 test.after(async () => {
   await pool.query('DELETE FROM "JobsIA_agent_executions"');
-  await pool.query('DELETE FROM "JobsIA_norm_rules" WHERE rule = $1', ['Regra de teste de integração para IA']);
+  await pool.query('DELETE FROM "JobsIA_validation_rules" WHERE rule = $1 OR texto_orientacao = $1', ['Regra de teste de integração para IA']);
   await pool.query('DELETE FROM "JobsIA_dictionary_terms" WHERE term = $1', ['TermoIntegracao']);
   await pool.query('DELETE FROM users WHERE email IN ($1, $2)', ['admin_integration@dataprev.gov.br', 'operator_integration@dataprev.gov.br']);
 });

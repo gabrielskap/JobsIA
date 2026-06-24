@@ -64,9 +64,9 @@ test.before(async () => {
   conversationId = convRes.rows[0].id;
 
   const chkRes = await pool.query(
-    `INSERT INTO "JobsIA_checklists" (conversation_id, type, user_id, status)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
-    [conversationId, 'transhost', solicitanteId, 'Concluído']
+    `INSERT INTO "JobsIA_checklists" (conversation_id, type, user_id, status, data)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [conversationId, 'transhost', solicitanteId, 'Concluído', '{}']
   );
   checklistId = chkRes.rows[0].id;
 });

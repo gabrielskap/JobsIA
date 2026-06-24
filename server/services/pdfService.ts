@@ -45,6 +45,8 @@ export interface PDFDataPayload {
   // Validation results
   errors?: any[];
   warnings?: any[];
+  applied_rules_snapshot?: any;
+  applied_rules_hash?: string;
 }
 
 export const TEMPLATE_VERSION = '2.0.0';
@@ -258,6 +260,43 @@ export const pdfService = {
         doc.text(warnLines, margin + 3, y + 3);
         y += warnBlockH;
       });
+      y += 2;
+    }
+
+    // --- SNAPSHOT DE REGRAS APLICADAS ---
+    const snapshot = payload.applied_rules_snapshot;
+    if (snapshot) {
+      checkSpace(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text('Snapshot das Regras Aplicadas (Assinatura Digital):', margin, y);
+      y += 5;
+
+      const rulesList = typeof snapshot === 'string' ? JSON.parse(snapshot) : snapshot;
+      if (Array.isArray(rulesList)) {
+        rulesList.forEach((r: any) => {
+          const ruleDesc = `• [ID: ${r.id.substring(0, 8)}... - Cod: ${r.codigo} - Versão: ${r.version || 1}] ${r.mensagem}`;
+          const ruleLines = doc.splitTextToSize(ruleDesc, contentW - 6);
+          const ruleBlockH = ruleLines.length * 4 + 2;
+          checkSpace(ruleBlockH);
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.setTextColor(100, 116, 139);
+          doc.text(ruleLines, margin + 3, y + 3);
+          y += ruleBlockH;
+        });
+      }
+
+      if (payload.applied_rules_hash) {
+        checkSpace(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(30, 41, 59);
+        doc.text(`HASH SHA256 DE INTEGRIDADE: ${payload.applied_rules_hash}`, margin + 3, y + 3);
+        y += 6;
+      }
       y += 2;
     }
 

@@ -126,9 +126,10 @@ export const validationEngine = {
        WHERE ativo = true 
          AND status = 'PUBLICADO'
          AND (ambiente = $1 OR ambiente = 'Global')
+         AND (aplicabilidade_job IS NULL OR $2 = ANY(aplicabilidade_job))
          AND vigencia_inicio <= now() 
          AND (vigencia_fim IS NULL OR vigencia_fim >= now())`,
-      [detectedEnv]
+      [detectedEnv, jobTypeId]
     );
 
     // 4. Executar Validações da Norma N/PD/004/02

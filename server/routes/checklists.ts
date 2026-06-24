@@ -207,15 +207,48 @@ router.post('/', async (req: AuthRequest, res) => {
       targetFile = originalFileName || '';
     }
 
+    // 7. Obter snapshot de regras aplicadas para o checklist
+    let appliedRulesSnapshot: any = null;
+    let appliedRulesHash: string | null = null;
+    if (jobTypeId) {
+      try {
+        const detectedEnv = (collected_data.ambiente || collected_data.environment || 'Unix') as string;
+        const { rows: appliedRules } = await pool.query(
+          `SELECT id, codigo, version, expressao, mensagem FROM "JobsIA_validation_rules" 
+           WHERE ativo = true 
+             AND status = 'PUBLICADO'
+             AND (ambiente = $1 OR ambiente = 'Global')
+             AND (aplicabilidade_job IS NULL OR $2 = ANY(aplicabilidade_job))
+             AND vigencia_inicio <= now() 
+             AND (vigencia_fim IS NULL OR vigencia_fim >= now())`,
+          [detectedEnv, jobTypeId]
+        );
+        if (appliedRules.length > 0) {
+          appliedRulesSnapshot = appliedRules.map(r => ({
+            id: r.id,
+            codigo: r.codigo,
+            version: r.version,
+            expressao: r.expressao,
+            mensagem: r.mensagem
+          }));
+          const crypto = await import('crypto');
+          appliedRulesHash = crypto.createHash('sha256').update(JSON.stringify(appliedRulesSnapshot)).digest('hex');
+        }
+      } catch (snapshotErr) {
+        console.error('Falha ao gerar snapshot das regras:', snapshotErr);
+      }
+    }
+
     // 7. Salvar checklist no Banco de Dados de forma idempotente
     let savedChecklist;
     try {
       const insertQuery = `
         INSERT INTO "JobsIA_checklists" (
           conversation_id, type, data, status, user_id, user_name, file_name,
-          semantic_type, job_type_id, target_file, request_id, errors, warnings, command
+          semantic_type, job_type_id, target_file, request_id, errors, warnings, command,
+          applied_rules_snapshot, applied_rules_hash
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
       `;
       const insertParams = [
@@ -233,6 +266,8 @@ router.post('/', async (req: AuthRequest, res) => {
         JSON.stringify(errorsList),
         JSON.stringify(warningsList),
         generatedCommand,
+        appliedRulesSnapshot ? JSON.stringify(appliedRulesSnapshot) : null,
+        appliedRulesHash
       ];
 
       const { rows } = await pool.query(insertQuery, insertParams);
@@ -361,6 +396,8 @@ router.get('/:id/pdf', async (req: AuthRequest, res) => {
       
       errors: checklist.errors || [],
       warnings: checklist.warnings || [],
+      applied_rules_snapshot: checklist.applied_rules_snapshot,
+      applied_rules_hash: checklist.applied_rules_hash,
     };
 
     // 5. Gerar o buffer do PDF

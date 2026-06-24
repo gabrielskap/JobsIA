@@ -42,7 +42,7 @@ async function buildConsolidatedPrompt(): Promise<{ prompt: string; promptVersio
 
   // 2. Obter as normas publicadas e ativas
   const { rows: normsRows } = await pool.query(
-    `SELECT id, environment, rule, version FROM "JobsIA_norm_rules"
+    `SELECT id, ambiente, texto_orientacao, version FROM "JobsIA_validation_rules"
      WHERE status = 'PUBLICADO' AND active = true ORDER BY created_at ASC`
   );
   const normsVersion = normsRows.map(n => `${n.id}:${n.version}`).join('|') || 'v1';
@@ -55,7 +55,7 @@ async function buildConsolidatedPrompt(): Promise<{ prompt: string; promptVersio
   const dictVersion = dictRows.map(d => `${d.id}:${d.version}`).join('|') || 'v1';
 
   const dictText = dictRows.map(d => `- ${d.term} (${d.category}): ${d.definition}`).join('\n');
-  const normsText = normsRows.map(r => `- [${r.environment}] ${r.rule}`).join('\n');
+  const normsText = normsRows.map(r => `- [${r.ambiente}] ${r.texto_orientacao}`).join('\n');
   
   const consolidated = `${basePrompt}
 
