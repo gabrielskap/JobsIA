@@ -1,6 +1,6 @@
 -- =============================================================================
 -- MIGRATION: Criar/ajustar tabela JobsIA_profiles para armazenar dados dos usuários
--- Banco: Supabase (PostgreSQL)
+-- Banco: PostgreSQL
 -- Data: 2026-05-15
 --
 -- Compatível com a tabela já existente (renomeada via rename_tables.sql).
@@ -81,7 +81,7 @@ CREATE POLICY "profiles_service_role_all"
   USING (true) WITH CHECK (true);
 
 -- -----------------------------------------------------------------------------
--- 6. Trigger: cria perfil automaticamente ao cadastrar usuário no Supabase Auth
+-- 6. Trigger: cria perfil automaticamente ao cadastrar usuário no Auth
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER

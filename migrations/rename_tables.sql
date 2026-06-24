@@ -1,6 +1,6 @@
 -- =============================================================================
 -- MIGRATION: Renomear tabelas para o padrão JobsIA_*
--- Banco: Supabase (PostgreSQL)
+-- Banco: PostgreSQL
 -- Data: 2026-05-14
 --
 -- ATENÇÃO: Execute este script em uma única transação.

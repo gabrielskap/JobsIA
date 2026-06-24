@@ -1,7 +1,7 @@
--- Migration: substituir Supabase Auth por tabela users própria
+-- Migration: substituir Auth por tabela users própria
 -- Executar uma única vez no banco PostgreSQL de destino
 
--- 1. Criar tabela de usuários (substitui auth.users do Supabase)
+-- 1. Criar tabela de usuários (substitui auth.users)
 CREATE TABLE IF NOT EXISTS users (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   email       TEXT        UNIQUE NOT NULL,
