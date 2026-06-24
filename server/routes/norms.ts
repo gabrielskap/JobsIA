@@ -165,19 +165,19 @@ router.post('/:id/publish', requireRole('ADMIN'), async (req: AuthRequest, res) 
     // Desativar e tirar da publicação a versão anterior se houver
     if (rule.previous_version_id) {
       await client.query(
-        `UPDATE "JobsIA_validation_rules" SET active = false, status = 'APROVADO' WHERE id = $1`,
+        `UPDATE "JobsIA_validation_rules" SET ativo = false, status = 'APROVADO' WHERE id = $1`,
         [rule.previous_version_id]
       );
     }
 
     // Se existirem outras regras ativas com o mesmo código, desativá-las
     await client.query(
-      `UPDATE "JobsIA_validation_rules" SET active = false, status = 'APROVADO' WHERE codigo = $1 AND id <> $2`,
+      `UPDATE "JobsIA_validation_rules" SET ativo = false, status = 'APROVADO' WHERE codigo = $1 AND id <> $2`,
       [rule.codigo, id]
     );
 
     const { rows } = await client.query(
-      `UPDATE "JobsIA_validation_rules" SET status = 'PUBLICADO', active = true WHERE id = $1 RETURNING *, ambiente AS environment, texto_orientacao AS rule`,
+      `UPDATE "JobsIA_validation_rules" SET status = 'PUBLICADO', ativo = true WHERE id = $1 RETURNING *, ambiente AS environment, texto_orientacao AS rule`,
       [id]
     );
     await client.query('COMMIT');
@@ -213,9 +213,9 @@ router.post('/:id/rollback', requireRole('ADMIN'), async (req: AuthRequest, res)
     }
 
     // Desativar versão atual e reativar/publicar a anterior
-    await client.query(`UPDATE "JobsIA_validation_rules" SET active = false, status = 'APROVADO' WHERE id = $1`, [id]);
+    await client.query(`UPDATE "JobsIA_validation_rules" SET ativo = false, status = 'APROVADO' WHERE id = $1`, [id]);
     const { rows } = await client.query(
-      `UPDATE "JobsIA_validation_rules" SET active = true, status = 'PUBLICADO' WHERE id = $1 RETURNING *, ambiente AS environment, texto_orientacao AS rule`,
+      `UPDATE "JobsIA_validation_rules" SET ativo = true, status = 'PUBLICADO' WHERE id = $1 RETURNING *, ambiente AS environment, texto_orientacao AS rule`,
       [prevId]
     );
 
