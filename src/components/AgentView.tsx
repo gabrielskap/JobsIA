@@ -201,61 +201,42 @@ export function AgentView() {
     job_type_id: number;
     job_name: string;
     collected_data: Record<string, string>;
-  }) => {
+  }): Promise<{ success: boolean; status?: string; checklistId?: string; message?: string }> => {
     const { job_type_id, job_name, collected_data } = args;
     const job = allJobs.find(j => j.id === job_type_id);
 
     if (!job) {
-      addMessage(
-        'agent',
-        `Não encontrei o Job Tipo ${job_type_id} na base de dados. Verifique se o job está cadastrado em /jobs.`,
-        true
-      );
-      return;
+      const errMsg = `Não encontrei o Job Tipo ${job_type_id} na base de dados. Verifique se o job está cadastrado em /jobs.`;
+      addMessage('agent', errMsg, true);
+      return { success: false, message: errMsg };
     }
 
-    const command = buildCommand(job.script, job.parameters, collected_data);
+    // Gerar request_id (idempotency key) único
+    const requestId = crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-    const checklistType = job.script
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '') || `tipo_${job_type_id}`;
-    const fileName = Object.values(collected_data)[0] || job_name;
-
-    // Chamar backend para validar o checklist antes de salvar ou gerar PDF
-    let validationResult;
+    let savedChecklist = null;
     try {
-      validationResult = await api.post<{
-        passed: boolean;
-        errors: Array<{ ruleCode: string; field: string; message: string; severity: string }>;
-        warnings: Array<{ ruleCode: string; field: string; message: string; severity: string }>;
-      }>('/validate-checklist', {
+      savedChecklist = await checklistService.create({
+        request_id: requestId,
         job_type_id,
-        data: {
-          ...collected_data,
-          file_name: fileName,
-        },
+        collected_data,
+        conversation_id: chatHistory[0]?.conversation_id || null,
       });
     } catch (err) {
-      console.error('Erro ao validar checklist:', err);
+      console.error('Erro na chamada do checklistService.create:', err);
     }
 
-    const hasErrors = validationResult && validationResult.errors && validationResult.errors.length > 0;
-    const hasWarnings = validationResult && validationResult.warnings && validationResult.warnings.length > 0;
-    const isSuccess = !hasErrors;
+    // Verificar retorno do checklistService.create para não exibir sucesso se persistência falhar
+    if (!savedChecklist) {
+      const errMsg = 'Erro na persistência do checklist: A gravação falhou no servidor.';
+      addMessage('agent', errMsg, true);
+      return { success: false, message: errMsg };
+    }
 
-    await checklistService.create({
-      type: checklistType,
-      data: {
-        ...collected_data,
-        __command: command,
-        __job_name: job_name,
-        __job_type_id: job_type_id,
-      } as Record<string, unknown>,
-      status: isSuccess ? 'Concluído' : 'Falha Validação',
-      file_name: fileName,
-      user_id: profile?.id,
-    });
+    const isSuccess = savedChecklist.status === 'Concluído';
+    const hasErrors = savedChecklist.errors && savedChecklist.errors.length > 0;
+    const hasWarnings = savedChecklist.warnings && savedChecklist.warnings.length > 0;
+    const command = savedChecklist.command || '';
 
     const fields = Object.entries(collected_data)
       .filter(([, v]) => v)
@@ -276,7 +257,7 @@ export function AgentView() {
             </div>
             <p className="text-xs text-red-600 font-medium">O checklist foi salvo com status de "Falha Validação". A geração do PDF e comandos foi bloqueada.</p>
             <div className="mt-2 space-y-1 max-h-40 overflow-y-auto pr-1">
-              {validationResult?.errors.map((err, i) => (
+              {savedChecklist.errors?.map((err: any, i: number) => (
                 <div key={i} className="text-xs bg-red-100/50 p-2 rounded border border-red-200">
                   <span className="font-semibold text-red-800">[{err.ruleCode}] {err.field}:</span> {err.message}
                 </div>
@@ -292,7 +273,7 @@ export function AgentView() {
               <span>Avisos de Validação (Revisão Recomendada)</span>
             </div>
             <div className="mt-2 space-y-1 max-h-40 overflow-y-auto pr-1">
-              {validationResult?.warnings.map((warn, i) => (
+              {savedChecklist.warnings?.map((warn: any, i: number) => (
                 <div key={i} className="text-xs bg-amber-100/50 p-2 rounded border border-amber-200">
                   <span className="font-semibold text-amber-800">[{warn.ruleCode}] {warn.field}:</span> {warn.message}
                 </div>
@@ -336,6 +317,7 @@ export function AgentView() {
     );
 
     addMessage('agent', resultNode);
+    return { success: true, status: savedChecklist.status, checklistId: savedChecklist.id };
   };
 
   // ── LIA API CALL ─────────────────────────────────────────────────────────────
@@ -364,17 +346,31 @@ export function AgentView() {
       if (assistantMsg.tool_calls?.length) {
         for (const toolCall of assistantMsg.tool_calls) {
           if (toolCall.function.name === 'generate_checklist') {
-            const args = JSON.parse(toolCall.function.arguments) as {
-              job_type_id: number;
-              job_name: string;
-              collected_data: Record<string, string>;
-            };
-            await handleGenerateChecklist(args);
+            let success = false;
+            let toolFeedback = "";
+            try {
+              const args = JSON.parse(toolCall.function.arguments);
+              if (!args || typeof args !== 'object' || typeof args.job_type_id !== 'number' || typeof args.collected_data !== 'object') {
+                throw new Error("Formato inválido de argumentos para a função generate_checklist. Esperado 'job_type_id' e 'collected_data'.");
+              }
+
+              const result = await handleGenerateChecklist(args);
+              if (result && result.success) {
+                success = true;
+                toolFeedback = `Checklist criado com sucesso. Status: ${result.status}. ID: ${result.checklistId}`;
+              } else {
+                toolFeedback = `Falha na criação do checklist: ${result?.message || 'Erro desconhecido'}`;
+              }
+            } catch (err: any) {
+              console.error("Falha ao processar tool call:", err);
+              addMessage('agent', `Falha ao processar proposta da IA: ${err.message || String(err)}`, true);
+              toolFeedback = `Erro ao executar a função: ${err.message || String(err)}. Por favor, corrija os argumentos e tente novamente.`;
+            }
 
             const toolResultMsg: ChatMessage = {
               role: 'tool',
               tool_call_id: toolCall.id,
-              content: JSON.stringify({ success: true, message: 'Checklist gerado e disponível para download.' }),
+              content: JSON.stringify({ success, message: toolFeedback }),
             };
             updatedHistory.push(toolResultMsg);
 

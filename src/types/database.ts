@@ -86,6 +86,13 @@ export interface Checklist {
   user_id?: string;
   file_name?: string;
   created_at: string;
+  semantic_type?: string;
+  job_type_id?: number;
+  target_file?: string;
+  request_id?: string;
+  errors?: Array<{ ruleCode: string; field: string; message: string; severity: string }>;
+  warnings?: Array<{ ruleCode: string; field: string; message: string; severity: string }>;
+  command?: string;
 }
 
 // Tabela: JobsIA_system_prompts

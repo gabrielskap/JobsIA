@@ -82,7 +82,14 @@ CREATE TABLE IF NOT EXISTS "JobsIA_checklists" (
   file_name       TEXT,
   user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
   user_name       TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  semantic_type   TEXT,
+  job_type_id     INTEGER REFERENCES "JobsIA_types"(id) ON UPDATE CASCADE ON DELETE SET NULL,
+  target_file     TEXT,
+  request_id      TEXT UNIQUE,
+  errors          JSONB DEFAULT '[]'::jsonb,
+  warnings        JSONB DEFAULT '[]'::jsonb,
+  command         TEXT
 );
 
 -- 8. Tabela: JobsIA_dictionary_terms (Dicionário de Termos)
@@ -198,6 +205,8 @@ CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON "JobsIA_conversations"(u
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON "JobsIA_messages"(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_checklists_user_id ON "JobsIA_checklists"(user_id);
 CREATE INDEX IF NOT EXISTS idx_checklists_conversation_id ON "JobsIA_checklists"(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_checklists_request_id ON "JobsIA_checklists"(request_id);
+CREATE INDEX IF NOT EXISTS idx_checklists_job_type ON "JobsIA_checklists"(job_type_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON "JobsIA_audit_logs"(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON "JobsIA_audit_logs"(created_at);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON "JobsIA_refresh_tokens"(user_id);

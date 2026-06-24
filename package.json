@@ -12,7 +12,8 @@
     "lint": "tsc --noEmit",
     "test:schema": "tsx server/tests/schema.test.ts",
     "test:rbac": "tsx server/tests/rbac.test.ts",
-    "test:validation": "tsx server/tests/validation.test.ts"
+    "test:validation": "tsx server/tests/validation.test.ts",
+    "test:security": "tsx server/tests/checklist_security.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

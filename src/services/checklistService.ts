@@ -12,7 +12,13 @@ export const checklistService = {
     }
   },
 
-  async create(checklist: Omit<Checklist, 'id' | 'created_at'>): Promise<Checklist | null> {
+  async create(
+    checklist: Partial<Checklist> & {
+      request_id?: string;
+      job_type_id?: number;
+      collected_data?: Record<string, any>;
+    }
+  ): Promise<Checklist | null> {
     try {
       return await api.post<Checklist>('/checklists', checklist);
     } catch (err) {
