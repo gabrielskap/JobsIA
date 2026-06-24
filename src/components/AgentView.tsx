@@ -227,6 +227,28 @@ export function AgentView() {
       .replace(/^_|_$/g, '') || `tipo_${job_type_id}`;
     const fileName = Object.values(collected_data)[0] || job_name;
 
+    // Chamar backend para validar o checklist antes de salvar ou gerar PDF
+    let validationResult;
+    try {
+      validationResult = await api.post<{
+        passed: boolean;
+        errors: Array<{ ruleCode: string; field: string; message: string; severity: string }>;
+        warnings: Array<{ ruleCode: string; field: string; message: string; severity: string }>;
+      }>('/validate-checklist', {
+        job_type_id,
+        data: {
+          ...collected_data,
+          file_name: fileName,
+        },
+      });
+    } catch (err) {
+      console.error('Erro ao validar checklist:', err);
+    }
+
+    const hasErrors = validationResult && validationResult.errors && validationResult.errors.length > 0;
+    const hasWarnings = validationResult && validationResult.warnings && validationResult.warnings.length > 0;
+    const isSuccess = !hasErrors;
+
     await checklistService.create({
       type: checklistType,
       data: {
@@ -235,7 +257,7 @@ export function AgentView() {
         __job_name: job_name,
         __job_type_id: job_type_id,
       } as Record<string, unknown>,
-      status: 'Concluído',
+      status: isSuccess ? 'Concluído' : 'Falha Validação',
       file_name: fileName,
       user_id: profile?.id,
     });
@@ -245,40 +267,76 @@ export function AgentView() {
       .map(([k, v]) => ({ label: k, value: v }));
 
     const resultNode = (
-      <div className="mt-2 space-y-3 w-full">
-        <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>
-            Checklist {job_name} (Tipo {job_type_id}) gerado!
-          </span>
-        </div>
-        <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-slate-300 relative group">
-          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={() => navigator.clipboard.writeText(command)}
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
+      <div className="mt-2 space-y-4 w-full">
+        {isSuccess ? (
+          <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Checklist {job_name} (Tipo {job_type_id}) gerado com sucesso!</span>
           </div>
-          <span className="text-slate-500 text-xs">
-            # Job Tipo {job_type_id} — {job_name}
-          </span>
-          <div className="text-emerald-400 mt-1 break-all">{command}</div>
-        </div>
-        <button
-          onClick={() =>
-            createChecklistPDF(
-              `${job_name.toUpperCase()} - TIPO ${job_type_id}`,
-              fields,
-              [{ label: `Job Tipo ${job_type_id} - ${job_name}`, command }],
-              `Checklist_Tipo${job_type_id}_${job_name.replace(/\s+/g, '_')}.pdf`
-            )
-          }
-          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl font-medium transition-colors shadow-sm text-sm"
-        >
-          <FileDown className="w-4 h-4" /> Baixar PDF do Checklist
-        </button>
+        ) : (
+          <div className="space-y-2 bg-red-50 p-4 rounded-xl border border-red-200 text-red-900 text-sm">
+            <div className="flex items-center gap-2 font-bold text-red-700">
+              <X className="w-4 h-4 shrink-0" />
+              <span>Falha na Validação de Conformidade (Norma N/PD/004/02)</span>
+            </div>
+            <p className="text-xs text-red-600 font-medium">O checklist foi salvo com status de "Falha Validação". A geração do PDF e comandos foi bloqueada.</p>
+            <div className="mt-2 space-y-1 max-h-40 overflow-y-auto pr-1">
+              {validationResult?.errors.map((err, i) => (
+                <div key={i} className="text-xs bg-red-100/50 p-2 rounded border border-red-200">
+                  <span className="font-semibold text-red-800">[{err.ruleCode}] {err.field}:</span> {err.message}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {hasWarnings && (
+          <div className="space-y-2 bg-amber-50 p-4 rounded-xl border border-amber-200 text-amber-900 text-sm">
+            <div className="flex items-center gap-2 font-bold text-amber-700">
+              <Settings2 className="w-4 h-4 shrink-0" />
+              <span>Avisos de Validação (Revisão Recomendada)</span>
+            </div>
+            <div className="mt-2 space-y-1 max-h-40 overflow-y-auto pr-1">
+              {validationResult?.warnings.map((warn, i) => (
+                <div key={i} className="text-xs bg-amber-100/50 p-2 rounded border border-amber-200">
+                  <span className="font-semibold text-amber-800">[{warn.ruleCode}] {warn.field}:</span> {warn.message}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isSuccess && (
+          <>
+            <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-slate-300 relative group">
+              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => navigator.clipboard.writeText(command)}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+              <span className="text-slate-500 text-xs">
+                # Job Tipo {job_type_id} — {job_name}
+              </span>
+              <div className="text-emerald-400 mt-1 break-all">{command}</div>
+            </div>
+            <button
+              onClick={() =>
+                createChecklistPDF(
+                  `${job_name.toUpperCase()} - TIPO ${job_type_id}`,
+                  fields,
+                  [{ label: `Job Tipo ${job_type_id} - ${job_name}`, command }],
+                  `Checklist_Tipo${job_type_id}_${job_name.replace(/\s+/g, '_')}.pdf`
+                )
+              }
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl font-medium transition-colors shadow-sm text-sm shadow-emerald-600/20 active:scale-95"
+            >
+              <FileDown className="w-4 h-4" /> Baixar PDF do Checklist
+            </button>
+          </>
+        )}
       </div>
     );
 

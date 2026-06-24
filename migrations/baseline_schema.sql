@@ -120,10 +120,58 @@ CREATE TABLE IF NOT EXISTS "JobsIA_audit_logs" (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 12. Tabela: JobsIA_validation_rules (Regras de Validação Versionadas)
+CREATE TABLE IF NOT EXISTS "JobsIA_validation_rules" (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  documento       TEXT NOT NULL DEFAULT 'N/PD/004/02',
+  versao          TEXT NOT NULL DEFAULT '2.0',
+  secao           TEXT NOT NULL,
+  codigo          TEXT NOT NULL UNIQUE,
+  campo_alvo      TEXT NOT NULL,
+  ambiente        TEXT NOT NULL CHECK (ambiente IN ('Unix', 'Windows', 'Mainframe', 'Global')),
+  tipo_regra      TEXT NOT NULL CHECK (tipo_regra IN ('required', 'data_type', 'enum', 'regex', 'dependency', 'custom')),
+  severidade      TEXT NOT NULL CHECK (severidade IN ('BLOQUEANTE', 'AVISO')),
+  mensagem        TEXT NOT NULL,
+  expressao       TEXT,
+  ativo           BOOLEAN NOT NULL DEFAULT true,
+  vigencia_inicio TIMESTAMPTZ NOT NULL DEFAULT now(),
+  vigencia_fim    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 13. Tabela: JobsIA_validation_runs (Execuções de Validação)
+CREATE TABLE IF NOT EXISTS "JobsIA_validation_runs" (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  checklist_id  UUID REFERENCES "JobsIA_checklists"(id) ON DELETE SET NULL,
+  user_id       UUID REFERENCES users(id) ON DELETE SET NULL,
+  passed        BOOLEAN NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 14. Tabela: JobsIA_validation_results (Resultados Detalhado da Validação)
+CREATE TABLE IF NOT EXISTS "JobsIA_validation_results" (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  validation_run_id  UUID NOT NULL REFERENCES "JobsIA_validation_runs"(id) ON DELETE CASCADE,
+  rule_id            UUID REFERENCES "JobsIA_validation_rules"(id) ON DELETE SET NULL,
+  rule_code          TEXT NOT NULL,
+  rule_version       TEXT NOT NULL,
+  campo_alvo         TEXT NOT NULL,
+  valor_analisado    TEXT,
+  severidade         TEXT NOT NULL,
+  mensagem           TEXT NOT NULL,
+  passou             BOOLEAN NOT NULL,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- =============================================================================
 -- CRIAÇÃO DE ÍNDICES ADICIONAIS PARA DESEMPENHO E CHAVES ESTRANGEIRAS
 -- =============================================================================
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_validation_rules_codigo ON "JobsIA_validation_rules"(codigo);
+CREATE INDEX IF NOT EXISTS idx_validation_rules_campo_alvo ON "JobsIA_validation_rules"(campo_alvo);
+CREATE INDEX IF NOT EXISTS idx_validation_runs_checklist ON "JobsIA_validation_runs"(checklist_id);
+CREATE INDEX IF NOT EXISTS idx_validation_results_run ON "JobsIA_validation_results"(validation_run_id);
+
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON "JobsIA_profiles"(user_id);
 CREATE INDEX IF NOT EXISTS idx_parameters_job_type_id ON "JobsIA_parameters"(job_type_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON "JobsIA_conversations"(user_id);

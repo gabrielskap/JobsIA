@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { requireAuth, type AuthRequest } from '../middleware/auth';
+import { validationEngine } from '../services/validationEngine';
 
 const router = Router();
 router.use(requireAuth);
@@ -38,12 +39,39 @@ router.post('/', async (req: AuthRequest, res) => {
   const derivedUserName = req.user?.name || '';
 
   try {
+    const jobTypeId = Number(data?.__job_type_id || data?.__job_name?.match(/Tipo (\d+)/)?.[1]);
+    let finalStatus = status || 'Concluído';
+    let valRunId: string | undefined = undefined;
+
+    if (jobTypeId) {
+      const valResult = await validationEngine.validateChecklist(
+        jobTypeId,
+        data,
+        req.userId,
+        true
+      );
+      if (!valResult.passed) {
+        finalStatus = 'Falha Validação';
+      }
+      valRunId = valResult.validationRunId;
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO "JobsIA_checklists" (conversation_id, type, data, status, user_id, user_name, file_name)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [conversation_id ?? null, type, JSON.stringify(data), status, derivedUserId, derivedUserName, file_name ?? null]
+      [conversation_id ?? null, type, JSON.stringify(data), finalStatus, derivedUserId, derivedUserName, file_name ?? null]
     );
-    res.status(201).json(rows[0]);
+
+    const savedChecklist = rows[0];
+
+    if (valRunId) {
+      await pool.query(
+        `UPDATE "JobsIA_validation_runs" SET checklist_id = $1 WHERE id = $2`,
+        [savedChecklist.id, valRunId]
+      );
+    }
+
+    res.status(201).json(savedChecklist);
   } catch (err) {
     console.error('checklists.create:', err);
     res.status(500).json({ message: 'Erro ao criar checklist' });

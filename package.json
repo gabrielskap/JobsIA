@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test:schema": "tsx server/tests/schema.test.ts",
-    "test:rbac": "tsx server/tests/rbac.test.ts"
+    "test:rbac": "tsx server/tests/rbac.test.ts",
+    "test:validation": "tsx server/tests/validation.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
