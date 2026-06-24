@@ -87,19 +87,27 @@ CREATE TABLE IF NOT EXISTS "JobsIA_checklists" (
 
 -- 8. Tabela: JobsIA_dictionary_terms (Dicionário de Termos)
 CREATE TABLE IF NOT EXISTS "JobsIA_dictionary_terms" (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  term        TEXT UNIQUE NOT NULL,
-  definition  TEXT NOT NULL,
-  category    TEXT NOT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  term                TEXT UNIQUE NOT NULL,
+  definition          TEXT NOT NULL,
+  category            TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'PUBLICADO' CONSTRAINT chk_dict_status CHECK (status IN ('RASCUNHO', 'APROVADO', 'PUBLICADO')),
+  version             INTEGER NOT NULL DEFAULT 1,
+  previous_version_id UUID REFERENCES "JobsIA_dictionary_terms"(id) ON DELETE SET NULL,
+  active              BOOLEAN NOT NULL DEFAULT true,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 9. Tabela: JobsIA_norm_rules (Normas e Regras)
 CREATE TABLE IF NOT EXISTS "JobsIA_norm_rules" (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  environment TEXT NOT NULL,
-  rule        TEXT NOT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  environment         TEXT NOT NULL,
+  rule                TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'PUBLICADO',
+  version             INTEGER NOT NULL DEFAULT 1,
+  previous_version_id UUID REFERENCES "JobsIA_norm_rules"(id) ON DELETE SET NULL,
+  active              BOOLEAN NOT NULL DEFAULT true,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 10. Tabela: JobsIA_system_prompts (Prompts de Sistema de IA)
@@ -122,21 +130,24 @@ CREATE TABLE IF NOT EXISTS "JobsIA_audit_logs" (
 
 -- 12. Tabela: JobsIA_validation_rules (Regras de Validação Versionadas)
 CREATE TABLE IF NOT EXISTS "JobsIA_validation_rules" (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  documento       TEXT NOT NULL DEFAULT 'N/PD/004/02',
-  versao          TEXT NOT NULL DEFAULT '2.0',
-  secao           TEXT NOT NULL,
-  codigo          TEXT NOT NULL UNIQUE,
-  campo_alvo      TEXT NOT NULL,
-  ambiente        TEXT NOT NULL CHECK (ambiente IN ('Unix', 'Windows', 'Mainframe', 'Global')),
-  tipo_regra      TEXT NOT NULL CHECK (tipo_regra IN ('required', 'data_type', 'enum', 'regex', 'dependency', 'custom')),
-  severidade      TEXT NOT NULL CHECK (severidade IN ('BLOQUEANTE', 'AVISO')),
-  mensagem        TEXT NOT NULL,
-  expressao       TEXT,
-  ativo           BOOLEAN NOT NULL DEFAULT true,
-  vigencia_inicio TIMESTAMPTZ NOT NULL DEFAULT now(),
-  vigencia_fim    TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  documento           TEXT NOT NULL DEFAULT 'N/PD/004/02',
+  versao              TEXT NOT NULL DEFAULT '2.0',
+  secao               TEXT NOT NULL,
+  codigo              TEXT NOT NULL UNIQUE,
+  campo_alvo          TEXT NOT NULL,
+  ambiente            TEXT NOT NULL CHECK (ambiente IN ('Unix', 'Windows', 'Mainframe', 'Global')),
+  tipo_regra          TEXT NOT NULL CHECK (tipo_regra IN ('required', 'data_type', 'enum', 'regex', 'dependency', 'custom')),
+  severidade          TEXT NOT NULL CHECK (severidade IN ('BLOQUEANTE', 'AVISO')),
+  mensagem            TEXT NOT NULL,
+  expressao           TEXT,
+  ativo               BOOLEAN NOT NULL DEFAULT true,
+  status              TEXT NOT NULL DEFAULT 'PUBLICADO' CONSTRAINT chk_norm_status CHECK (status IN ('RASCUNHO', 'APROVADO', 'PUBLICADO')),
+  version             INTEGER NOT NULL DEFAULT 1,
+  previous_version_id UUID REFERENCES "JobsIA_validation_rules"(id) ON DELETE SET NULL,
+  vigencia_inicio     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  vigencia_fim        TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 13. Tabela: JobsIA_validation_runs (Execuções de Validação)

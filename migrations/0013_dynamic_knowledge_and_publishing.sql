@@ -6,7 +6,9 @@
 BEGIN;
 
 -- 1. Modificações na Tabela de Normas (Regras de Validação Versionadas)
-ALTER TABLE "JobsIA_validation_rules" ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'PUBLICADO' CONSTRAINT chk_norm_status CHECK (status IN ('RASCUNHO', 'APROVADO', 'PUBLICADO'));
+ALTER TABLE "JobsIA_validation_rules" ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'PUBLICADO';
+ALTER TABLE "JobsIA_validation_rules" DROP CONSTRAINT IF EXISTS chk_norm_status;
+ALTER TABLE "JobsIA_validation_rules" ADD CONSTRAINT chk_norm_status CHECK (status IN ('RASCUNHO', 'APROVADO', 'PUBLICADO'));
 ALTER TABLE "JobsIA_validation_rules" ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE "JobsIA_validation_rules" ADD COLUMN IF NOT EXISTS previous_version_id UUID REFERENCES "JobsIA_validation_rules"(id) ON DELETE SET NULL;
 ALTER TABLE "JobsIA_validation_rules" ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
