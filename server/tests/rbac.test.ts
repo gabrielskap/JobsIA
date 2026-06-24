@@ -60,13 +60,14 @@ async function createTestUser(name: string, email: string, role: string, isActiv
 test.before(async () => {
   // Limpar usuários de teste anteriores caso existam
   await pool.query(
-    `DELETE FROM users WHERE email IN ($1, $2, $3, $4, $5)`,
+    `DELETE FROM users WHERE email IN ($1, $2, $3, $4, $5, $6)`,
     [
       'admin-test@jobsia.com',
       'operador-test@jobsia.com',
       'solicitante1-test@jobsia.com',
       'solicitante2-test@jobsia.com',
-      'inativo-test@jobsia.com'
+      'inativo-test@jobsia.com',
+      'novo.solicitante@jobsia.com'
     ]
   );
 
@@ -87,13 +88,14 @@ test.after(async () => {
 
   // Limpar usuários e profiles criados nos testes (ON DELETE CASCADE cuidará do resto)
   await pool.query(
-    `DELETE FROM users WHERE email IN ($1, $2, $3, $4, $5)`,
+    `DELETE FROM users WHERE email IN ($1, $2, $3, $4, $5, $6)`,
     [
       'admin-test@jobsia.com',
       'operador-test@jobsia.com',
       'solicitante1-test@jobsia.com',
       'solicitante2-test@jobsia.com',
-      'inativo-test@jobsia.com'
+      'inativo-test@jobsia.com',
+      'novo.solicitante@jobsia.com'
     ]
   );
 
