@@ -123,19 +123,137 @@ type LIAResponse = {
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
 
-const formatMessageText = (text: string) => {
-  let processedText = text.replace(/---/g, '');
-  processedText = processedText.replace(/^-\s/gm, '• ');
-
-  if (!processedText.includes('**')) return processedText;
+const formatMessageText = (text: string): ReactNode => {
+  // Limpar traços repetidos
+  let cleanText = text.replace(/---/g, '');
   
-  const parts = processedText.split('**');
-  return parts.map((part, index) => {
-    if (index % 2 !== 0) {
-      return <strong key={index} className="font-bold">{part}</strong>;
+  const lines = cleanText.split('\n');
+  const elements: ReactNode[] = [];
+  
+  let currentTableRows: string[][] = [];
+  let inTable = false;
+  
+  const renderCellText = (cellText: string) => {
+    const trimmed = cellText.trim();
+    if (!trimmed.includes('**')) return trimmed;
+    const parts = trimmed.split('**');
+    return parts.map((part, index) => {
+      if (index % 2 !== 0) {
+        return <strong key={index} className="font-bold">{part}</strong>;
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
+  const flushTable = (key: string | number) => {
+    if (currentTableRows.length === 0) return;
+    
+    // Uma linha separadora de markdown só contém caracteres como |, -, :, e espaços
+    const isSeparator = (row: string[]) => {
+      return row.every(cell => cell.trim() === '' || /^:?-+:?$/.test(cell.trim()));
+    };
+    
+    // Filtrar linhas separadoras
+    const validRows = currentTableRows.filter(row => !isSeparator(row));
+    
+    if (validRows.length === 0) {
+      currentTableRows = [];
+      return;
     }
-    return <span key={index}>{part}</span>;
-  });
+    
+    const headerRow = validRows[0];
+    const bodyRows = validRows.slice(1);
+    
+    elements.push(
+      <div key={`table-${key}`} className="my-3 overflow-x-auto rounded-xl border border-slate-200 shadow-sm bg-white">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              {headerRow.map((cell, idx) => (
+                <th key={idx} className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50">
+                  {renderCellText(cell)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {bodyRows.map((row, rowIdx) => (
+              <tr key={rowIdx} className="hover:bg-slate-50/50 transition-colors">
+                {row.map((cell, cellIdx) => (
+                  <td key={cellIdx} className="px-4 py-2.5 text-slate-700 font-medium whitespace-normal">
+                    {renderCellText(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+    
+    currentTableRows = [];
+  };
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isTableLine = line.includes('|');
+    
+    if (isTableLine) {
+      inTable = true;
+      let cells = line.split('|');
+      // Remover primeiro e último se vazios (típico do markdown)
+      if (cells[0].trim() === '') cells.shift();
+      if (cells[cells.length - 1]?.trim() === '') cells.pop();
+      
+      // Filtrar células vazias extras caso venha algo como ||-|-|
+      cells = cells.map(c => c.trim());
+      currentTableRows.push(cells);
+    } else {
+      if (inTable) {
+        flushTable(i);
+        inTable = false;
+      }
+      
+      const trimmedLine = line.trim();
+      if (trimmedLine.startsWith('###')) {
+        const title = trimmedLine.replace(/^###\s*/, '');
+        elements.push(
+          <h3 key={`h3-${i}`} className="text-sm font-bold text-slate-800 mt-4 mb-2 flex items-center gap-2">
+            {renderCellText(title)}
+          </h3>
+        );
+      } else if (trimmedLine.startsWith('##')) {
+        const title = trimmedLine.replace(/^##\s*/, '');
+        elements.push(
+          <h2 key={`h2-${i}`} className="text-base font-bold text-slate-800 mt-5 mb-3 flex items-center gap-2">
+            {renderCellText(title)}
+          </h2>
+        );
+      } else if (trimmedLine.startsWith('•') || trimmedLine.startsWith('-') || trimmedLine.startsWith('*')) {
+        const item = trimmedLine.replace(/^[•\-*]\s*/, '');
+        elements.push(
+          <div key={`li-${i}`} className="flex items-start gap-2 my-1 text-slate-700 pl-2">
+            <span className="text-blue-500 mt-1.5 select-none text-[8px]">•</span>
+            <span className="flex-1">{renderCellText(item)}</span>
+          </div>
+        );
+      } else if (trimmedLine === '') {
+        elements.push(<div key={`br-${i}`} className="h-2" />);
+      } else {
+        elements.push(
+          <p key={`p-${i}`} className="my-1.5 leading-relaxed text-slate-700">
+            {renderCellText(line)}
+          </p>
+        );
+      }
+    }
+  }
+  
+  if (inTable) {
+    flushTable('end');
+  }
+  
+  return <div className="space-y-1">{elements}</div>;
 };
 
 // ── COMPONENT ────────────────────────────────────────────────────────────────
