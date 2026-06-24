@@ -15,6 +15,7 @@ import systemPromptsRouter from './routes/systemPrompts';
 import usersRouter from './routes/users';
 import aiRouter from './routes/ai';
 import validationRouter from './routes/validation';
+import interactionsRouter from './routes/interactions';
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/api/system-prompts', systemPromptsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/validate-checklist', validationRouter);
+app.use('/api/interactions', interactionsRouter);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 

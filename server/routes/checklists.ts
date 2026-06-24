@@ -258,6 +258,30 @@ router.post('/', async (req: AuthRequest, res) => {
         `UPDATE "JobsIA_validation_runs" SET checklist_id = $1 WHERE id = $2`,
         [savedChecklist.id, valRunId]
       );
+
+      // Classificar a interação no histórico se houver conversa vinculada
+      if (conversation_id) {
+        try {
+          // Achar a última mensagem da LIA/User
+          const { rows: msgRows } = await pool.query(
+            `SELECT id FROM "JobsIA_messages" WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            [conversation_id]
+          );
+          const msgId = msgRows[0]?.id;
+          
+          const ruleCode = errorsList[0]?.ruleCode || warningsList[0]?.ruleCode || null;
+          const assunto = ruleCode ? 'nomenclatura' : 'parametros';
+          const resultado = finalStatus;
+
+          await pool.query(
+            `INSERT INTO "JobsIA_interaction_classifications" (message_id, assunto, job_type_id, regra_acionada, resultado)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [msgId || null, assunto, jobTypeId || null, ruleCode, resultado]
+          );
+        } catch (classificationErr) {
+          console.error('Falha ao classificar interacao automaticamente:', classificationErr);
+        }
+      }
     }
 
     res.status(201).json(savedChecklist);
