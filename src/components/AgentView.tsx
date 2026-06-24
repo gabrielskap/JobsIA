@@ -218,21 +218,21 @@ const formatMessageText = (text: string): ReactNode => {
       if (trimmedLine.startsWith('###')) {
         const title = trimmedLine.replace(/^###\s*/, '');
         elements.push(
-          <h3 key={`h3-${i}`} className="text-sm font-bold text-slate-800 mt-4 mb-2 flex items-center gap-2">
+          <h3 key={`h3-${i}`} className="text-sm font-bold mt-4 mb-2 flex items-center gap-2">
             {renderCellText(title)}
           </h3>
         );
       } else if (trimmedLine.startsWith('##')) {
         const title = trimmedLine.replace(/^##\s*/, '');
         elements.push(
-          <h2 key={`h2-${i}`} className="text-base font-bold text-slate-800 mt-5 mb-3 flex items-center gap-2">
+          <h2 key={`h2-${i}`} className="text-base font-bold mt-5 mb-3 flex items-center gap-2">
             {renderCellText(title)}
           </h2>
         );
       } else if (trimmedLine.startsWith('•') || trimmedLine.startsWith('-') || trimmedLine.startsWith('*')) {
         const item = trimmedLine.replace(/^[•\-*]\s*/, '');
         elements.push(
-          <div key={`li-${i}`} className="flex items-start gap-2 my-1 text-slate-700 pl-2">
+          <div key={`li-${i}`} className="flex items-start gap-2 my-1 pl-2">
             <span className="text-blue-500 mt-1.5 select-none text-[8px]">•</span>
             <span className="flex-1">{renderCellText(item)}</span>
           </div>
@@ -241,7 +241,7 @@ const formatMessageText = (text: string): ReactNode => {
         elements.push(<div key={`br-${i}`} className="h-2" />);
       } else {
         elements.push(
-          <p key={`p-${i}`} className="my-1.5 leading-relaxed text-slate-700">
+          <p key={`p-${i}`} className="my-1.5 leading-relaxed">
             {renderCellText(line)}
           </p>
         );

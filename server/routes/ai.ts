@@ -77,7 +77,7 @@ ${normsText || '(Nenhuma norma publicada)'}`;
 
 router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
   const { messages, tools, conversation_id } = req.body as {
-    messages: unknown[];
+    messages: any[];
     tools?: unknown[];
     conversation_id?: string;
   };
@@ -92,6 +92,28 @@ router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
   }
 
   try {
+    // Obter ou criar a conversa vinculada ao usuário
+    let activeConversationId = conversation_id;
+    if (!activeConversationId) {
+      const convRes = await pool.query(
+        `INSERT INTO "JobsIA_conversations" (flow_type, user_id)
+         VALUES ($1, $2) RETURNING id`,
+        ['transhost', req.userId]
+      );
+      activeConversationId = convRes.rows[0].id;
+    }
+
+    // Persistir a mensagem do usuário se for do tipo 'user'
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      const textToSave = lastMsg.content || lastMsg.text || '';
+      await pool.query(
+        `INSERT INTO "JobsIA_messages" (conversation_id, role, text)
+         VALUES ($1, $2, $3)`,
+        [activeConversationId, 'user', textToSave]
+      );
+    }
+
     // Obter do cache ou montar novo
     let promptData = aiCache.get('consolidated_prompt');
     if (!promptData) {
@@ -124,21 +146,88 @@ router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
 
     const data = await response.json();
 
+    // Persistir a resposta da LIA API como 'agent'
+    const assistantChoice = data.choices?.[0]?.message;
+    if (assistantChoice && assistantChoice.content) {
+      await pool.query(
+        `INSERT INTO "JobsIA_messages" (conversation_id, role, text)
+         VALUES ($1, $2, $3)`,
+        [activeConversationId, 'agent', assistantChoice.content]
+      );
+    }
+
     // Registrar a execução na tabela de histórico
     try {
       await pool.query(
         `INSERT INTO "JobsIA_agent_executions" (conversation_id, user_id, prompt_version, norms_version, dictionary_version, model)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [conversation_id || null, req.userId || null, promptVersion, normsVersion, dictVersion, model]
+        [activeConversationId || null, req.userId || null, promptVersion, normsVersion, dictVersion, model]
       );
     } catch (e) {
       console.error('Falha ao gravar JobsIA_agent_executions:', e);
     }
 
-    res.json(data);
+    res.json({ ...data, conversation_id: activeConversationId });
   } catch (err) {
     console.error('LIA API error:', err);
     res.status(500).json({ error: 'Erro ao contatar a LIA API' });
+  }
+});
+
+// Rotas de conversas
+router.get('/conversations', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM "JobsIA_conversations" WHERE user_id = $1 ORDER BY created_at DESC`,
+      [req.userId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('ai.conversations.list:', err);
+    res.status(500).json({ message: 'Erro ao buscar conversas' });
+  }
+});
+
+router.post('/conversations', requireAuth, async (req: AuthRequest, res) => {
+  const { flow_type } = req.body as { flow_type?: string };
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO "JobsIA_conversations" (flow_type, user_id)
+       VALUES ($1, $2) RETURNING *`,
+      [flow_type || 'transhost', req.userId]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('ai.conversations.create:', err);
+    res.status(500).json({ message: 'Erro ao criar conversa' });
+  }
+});
+
+router.get('/conversations/:id/messages', requireAuth, async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  try {
+    // Verificar se a conversa pertence ao usuário
+    const { rows: convRows } = await pool.query(
+      `SELECT user_id FROM "JobsIA_conversations" WHERE id = $1`,
+      [id]
+    );
+    if (convRows.length === 0) {
+      res.status(404).json({ message: 'Conversa não encontrada' });
+      return;
+    }
+    if (convRows[0].user_id !== req.userId) {
+      res.status(403).json({ message: 'Acesso negado' });
+      return;
+    }
+
+    const { rows } = await pool.query(
+      `SELECT * FROM "JobsIA_messages" WHERE conversation_id = $1 ORDER BY created_at ASC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('ai.conversations.messages:', err);
+    res.status(500).json({ message: 'Erro ao buscar mensagens' });
   }
 });
 
