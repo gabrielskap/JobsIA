@@ -10,6 +10,7 @@ DROP VIEW IF EXISTS v_checklist_history CASCADE;
 DROP VIEW IF EXISTS v_checklist_kpis CASCADE;
 
 -- 2. Remover tabelas na ordem inversa de suas dependências (FKs)
+DROP TABLE IF EXISTS "JobsIA_refresh_tokens" CASCADE;
 DROP TABLE IF EXISTS "JobsIA_messages" CASCADE;
 DROP TABLE IF EXISTS "JobsIA_conversations" CASCADE;
 DROP TABLE IF EXISTS "JobsIA_checklists" CASCADE;

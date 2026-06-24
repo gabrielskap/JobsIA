@@ -1,5 +1,11 @@
 import express from 'express';
 import cors from 'cors';
+
+if (!process.env.JWT_SECRET) {
+  console.error("ERRO CRÍTICO DE INICIALIZAÇÃO: A variável de ambiente JWT_SECRET não está definida.");
+  process.exit(1);
+}
+
 import authRouter from './routes/auth';
 import jobsRouter from './routes/jobs';
 import checklistsRouter from './routes/checklists';

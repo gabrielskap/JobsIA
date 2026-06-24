@@ -17,15 +17,12 @@ export function HistoryView() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const currentUserId = profile?.id ?? null;
-
   useEffect(() => {
-    if (currentUserId === null) return;
-    checklistService.getAll(currentUserId).then(data => {
+    checklistService.getAll().then(data => {
       setChecklists(data);
       setLoading(false);
     });
-  }, [currentUserId]);
+  }, []);
 
   const filtered = checklists.filter(item =>
     !search ||

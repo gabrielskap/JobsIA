@@ -22,8 +22,13 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const { token, user } = await api.post<{ token: string; user: AuthUser }>('/auth/login', { email, password });
-      login(user, token);
+      const { token, refreshToken, user, profile } = await api.post<{
+        token: string;
+        refreshToken: string;
+        user: AuthUser;
+        profile: any;
+      }>('/auth/login', { email, password });
+      login(user, token, refreshToken, profile);
       navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao fazer login');
@@ -79,9 +84,6 @@ export default function LoginPage() {
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between items-center">
                 <label className="text-sm font-medium text-slate-700" htmlFor="password">Senha</label>
-                <button type="button" className="text-sm text-blue-600 hover:underline">
-                  Esqueci minha senha
-                </button>
               </div>
               <div className="relative">
                 <input

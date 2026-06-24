@@ -1,18 +1,19 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api, clearToken, getToken, setToken } from '../lib/api';
+import { api, clearToken, getToken, setToken, getRefreshToken, setRefreshToken, clearRefreshToken } from '../lib/api';
 import type { Profile } from '../types/database';
 
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  role?: string;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   profile: Profile | null;
   loading: boolean;
-  login: (user: AuthUser, token: string) => void;
+  login: (user: AuthUser, token: string, refreshToken: string, profile: Profile | null) => void;
   signOut: () => void;
 }
 
@@ -33,17 +34,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!getToken()) { setLoading(false); return; }
     api.get<{ user: AuthUser; profile: Profile | null }>('/auth/me')
       .then(({ user: u, profile: p }) => { setUser(u); setProfile(p); })
-      .catch(() => clearToken())
+      .catch(() => { clearToken(); clearRefreshToken(); })
       .finally(() => setLoading(false));
   }, []);
 
-  function login(u: AuthUser, token: string) {
+  function login(u: AuthUser, token: string, refreshToken: string, p: Profile | null) {
     setToken(token);
+    setRefreshToken(refreshToken);
     setUser(u);
+    setProfile(p);
   }
 
   function signOut() {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      // Tentar invalidar no servidor, mas fazer logout localmente de qualquer forma
+      api.post('/auth/logout', { refreshToken }).catch(err => {
+        console.error('Erro ao realizar logout no servidor:', err);
+      });
+    }
     clearToken();
+    clearRefreshToken();
     setUser(null);
     setProfile(null);
   }

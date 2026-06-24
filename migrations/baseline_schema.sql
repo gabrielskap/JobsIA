@@ -174,6 +174,15 @@ CREATE TABLE IF NOT EXISTS "JobsIA_validation_results" (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 15. Tabela: JobsIA_refresh_tokens (Tokens de Atualização)
+CREATE TABLE IF NOT EXISTS "JobsIA_refresh_tokens" (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT UNIQUE NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- =============================================================================
 -- CRIAÇÃO DE ÍNDICES ADICIONAIS PARA DESEMPENHO E CHAVES ESTRANGEIRAS
 -- =============================================================================
@@ -191,6 +200,8 @@ CREATE INDEX IF NOT EXISTS idx_checklists_user_id ON "JobsIA_checklists"(user_id
 CREATE INDEX IF NOT EXISTS idx_checklists_conversation_id ON "JobsIA_checklists"(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON "JobsIA_audit_logs"(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON "JobsIA_audit_logs"(created_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON "JobsIA_refresh_tokens"(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON "JobsIA_refresh_tokens"(token);
 
 -- =============================================================================
 -- CRIAÇÃO DAS VIEWS DE NEGÓCIO CORRIGIDAS (SEM DEPS DE ENUMS LEGADOS)

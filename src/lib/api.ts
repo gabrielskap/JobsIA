@@ -12,6 +12,18 @@ export function clearToken(): void {
   localStorage.removeItem('auth_token');
 }
 
+export function getRefreshToken(): string | null {
+  return localStorage.getItem('auth_refresh_token');
+}
+
+export function setRefreshToken(token: string): void {
+  localStorage.setItem('auth_refresh_token', token);
+}
+
+export function clearRefreshToken(): void {
+  localStorage.removeItem('auth_refresh_token');
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -20,7 +32,37 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  let res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      try {
+        const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (refreshRes.ok) {
+          const data = await refreshRes.json() as { token: string; refreshToken: string };
+          setToken(data.token);
+          setRefreshToken(data.refreshToken);
+          
+          headers['Authorization'] = `Bearer ${data.token}`;
+          res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+        } else {
+          clearToken();
+          clearRefreshToken();
+          window.location.href = '/login';
+        }
+      } catch (err) {
+        clearToken();
+        clearRefreshToken();
+        window.location.href = '/login';
+      }
+    }
+  }
+
   if (res.status === 204) return undefined as T;
   const body = await res.json();
   if (!res.ok) throw new Error(body.message || res.statusText);

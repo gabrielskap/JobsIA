@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { pool } from '../db';
 import { requireAuth, type AuthRequest } from '../middleware/auth';
 
@@ -29,10 +30,117 @@ router.post('/login', async (req, res) => {
       res.status(401).json({ message: 'Usuário inativo' });
       return;
     }
-    const token = jwt.sign({ sub: user.id }, process.env.JWT_SECRET!, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+    
+    // Buscar perfil completo
+    const profileRes = await pool.query(
+      'SELECT * FROM "JobsIA_profiles" WHERE user_id = $1',
+      [user.id]
+    );
+    const profile = profileRes.rows[0] ?? null;
+
+    // Gerar tokens
+    const token = jwt.sign({ sub: user.id }, process.env.JWT_SECRET!, { expiresIn: '1h' });
+    const refreshToken = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 dias
+
+    await pool.query(
+      `INSERT INTO "JobsIA_refresh_tokens" (user_id, token, expires_at)
+       VALUES ($1, $2, $3)`,
+      [user.id, refreshToken, expiresAt]
+    );
+
+    res.json({
+      token,
+      refreshToken,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      profile
+    });
   } catch (err) {
     console.error('auth/login:', err);
+    res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
+router.post('/refresh', async (req, res) => {
+  const { refreshToken } = req.body as { refreshToken?: string };
+  if (!refreshToken) {
+    res.status(400).json({ message: 'Refresh token é obrigatório' });
+    return;
+  }
+
+  try {
+    // Buscar token no banco
+    const { rows: tokenRows } = await pool.query(
+      'SELECT * FROM "JobsIA_refresh_tokens" WHERE token = $1',
+      [refreshToken]
+    );
+    const tokenRecord = tokenRows[0];
+    if (!tokenRecord) {
+      res.status(401).json({ message: 'Refresh token inválido ou revogado' });
+      return;
+    }
+
+    // Verificar expiração
+    if (new Date(tokenRecord.expires_at) < new Date()) {
+      await pool.query('DELETE FROM "JobsIA_refresh_tokens" WHERE id = $1', [tokenRecord.id]);
+      res.status(401).json({ message: 'Refresh token expirado' });
+      return;
+    }
+
+    // Verificar se usuário está ativo
+    const { rows: userRows } = await pool.query(
+      `SELECT u.id, u.email, u.name, u.role, COALESCE(p.is_active, true) as is_active
+       FROM users u
+       LEFT JOIN "JobsIA_profiles" p ON p.user_id = u.id
+       WHERE u.id = $1`,
+      [tokenRecord.user_id]
+    );
+    const user = userRows[0];
+    if (!user) {
+      res.status(401).json({ message: 'Usuário não encontrado' });
+      return;
+    }
+    if (!user.is_active) {
+      res.status(401).json({ message: 'Usuário inativo' });
+      return;
+    }
+
+    // Gerar novos tokens
+    const newToken = jwt.sign({ sub: user.id }, process.env.JWT_SECRET!, { expiresIn: '1h' });
+    const newRefreshToken = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 dias
+
+    // Deletar o antigo e salvar o novo
+    await pool.query('DELETE FROM "JobsIA_refresh_tokens" WHERE id = $1', [tokenRecord.id]);
+    await pool.query(
+      `INSERT INTO "JobsIA_refresh_tokens" (user_id, token, expires_at)
+       VALUES ($1, $2, $3)`,
+      [user.id, newRefreshToken, expiresAt]
+    );
+
+    res.json({
+      token: newToken,
+      refreshToken: newRefreshToken
+    });
+  } catch (err) {
+    console.error('auth/refresh:', err);
+    res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
+router.post('/logout', async (req, res) => {
+  const { refreshToken } = req.body as { refreshToken?: string };
+  if (!refreshToken) {
+    res.status(400).json({ message: 'Refresh token é obrigatório' });
+    return;
+  }
+  try {
+    await pool.query('DELETE FROM "JobsIA_refresh_tokens" WHERE token = $1', [refreshToken]);
+    res.status(200).json({ message: 'Logout realizado com sucesso' });
+  } catch (err) {
+    console.error('auth/logout:', err);
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
 });
