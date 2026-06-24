@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { requireAuth, requireRole, logAudit, type AuthRequest } from '../middleware/auth';
+import { aiCache } from '../routes/ai';
 
 const router = Router();
 router.use(requireAuth);
@@ -8,7 +9,7 @@ router.use(requireAuth);
 router.get('/', async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM "JobsIA_dictionary_terms" ORDER BY created_at ASC'
+      'SELECT * FROM "JobsIA_dictionary_terms" WHERE active = true ORDER BY created_at ASC'
     );
     res.json(rows);
   } catch (err) {
@@ -21,7 +22,8 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { term, definition, category } = req.body;
   try {
     const { rows } = await pool.query(
-      `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category) VALUES ($1, $2, $3) RETURNING *`,
+      `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category, status, version) 
+       VALUES ($1, $2, $3, 'RASCUNHO', 1) RETURNING *`,
       [term, definition, category]
     );
     await logAudit(req.userId, 'CREATE_DICT_TERM', { id: rows[0].id, term, definition, category }, req.ip);
@@ -36,12 +38,16 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { id } = req.params;
   const { term, definition, category } = req.body;
   try {
+    const { rows: current } = await pool.query('SELECT * FROM "JobsIA_dictionary_terms" WHERE id = $1', [id]);
+    if (current.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
+
+    const nextVersion = current[0].version + 1;
     const { rows } = await pool.query(
-      `UPDATE "JobsIA_dictionary_terms" SET term=$1, definition=$2, category=$3 WHERE id=$4 RETURNING *`,
-      [term, definition, category, id]
+      `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category, status, version, previous_version_id)
+       VALUES ($1, $2, $3, 'RASCUNHO', $4, $5) RETURNING *`,
+      [term || current[0].term, definition || current[0].definition, category || current[0].category, nextVersion, id]
     );
-    if (rows.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
-    await logAudit(req.userId, 'UPDATE_DICT_TERM', { id, term, definition, category }, req.ip);
+    await logAudit(req.userId, 'UPDATE_DICT_TERM_DRAFT', { id, new_draft_id: rows[0].id, version: nextVersion }, req.ip);
     res.json(rows[0]);
   } catch (err) {
     console.error('dictionary.update:', err);
@@ -49,10 +55,100 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   }
 });
 
+// Aprovar termo
+router.post('/:id/approve', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE "JobsIA_dictionary_terms" SET status = 'APROVADO' WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (rows.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
+    await logAudit(req.userId, 'APPROVE_DICT_TERM', { id }, req.ip);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('dictionary.approve:', err);
+    res.status(500).json({ message: 'Erro ao aprovar termo' });
+  }
+});
+
+// Publicar termo (invalida versão anterior)
+router.post('/:id/publish', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: term } = await client.query('SELECT * FROM "JobsIA_dictionary_terms" WHERE id = $1', [id]);
+    if (term.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
+
+    if (term[0].previous_version_id) {
+      await client.query(
+        `UPDATE "JobsIA_dictionary_terms" SET active = false, status = 'APROVADO' WHERE id = $1`,
+        [term[0].previous_version_id]
+      );
+    }
+
+    const { rows } = await client.query(
+      `UPDATE "JobsIA_dictionary_terms" SET status = 'PUBLICADO', active = true WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    await client.query('COMMIT');
+    
+    if (aiCache) aiCache.clear();
+
+    await logAudit(req.userId, 'PUBLISH_DICT_TERM', { id }, req.ip);
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('dictionary.publish:', err);
+    res.status(500).json({ message: 'Erro ao publicar termo' });
+  } finally {
+    client.release();
+  }
+});
+
+// Rollback do termo
+router.post('/:id/rollback', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: current } = await client.query('SELECT * FROM "JobsIA_dictionary_terms" WHERE id = $1', [id]);
+    if (current.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
+
+    const prevId = current[0].previous_version_id;
+    if (!prevId) {
+      res.status(400).json({ message: 'Não existe versão anterior para fazer rollback' });
+      return;
+    }
+
+    await client.query(`UPDATE "JobsIA_dictionary_terms" SET active = false, status = 'APROVADO' WHERE id = $1`, [id]);
+    const { rows } = await client.query(
+      `UPDATE "JobsIA_dictionary_terms" SET active = true, status = 'PUBLICADO' WHERE id = $1 RETURNING *`,
+      [prevId]
+    );
+    await client.query('COMMIT');
+    
+    if (aiCache) aiCache.clear();
+
+    await logAudit(req.userId, 'ROLLBACK_DICT_TERM', { id, restored_id: prevId }, req.ip);
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('dictionary.rollback:', err);
+    res.status(500).json({ message: 'Erro no rollback do termo' });
+  } finally {
+    client.release();
+  }
+});
+
 router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     await pool.query('DELETE FROM "JobsIA_dictionary_terms" WHERE id = $1', [req.params.id]);
     await logAudit(req.userId, 'DELETE_DICT_TERM', { id: req.params.id }, req.ip);
+    
+    if (aiCache) aiCache.clear();
+
     res.status(204).send();
   } catch (err) {
     console.error('dictionary.remove:', err);
@@ -67,11 +163,15 @@ router.post('/seed', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     for (const item of items) {
       await pool.query(
-        `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category) VALUES ($1, $2, $3)`,
+        `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category, status, version) 
+         VALUES ($1, $2, $3, 'PUBLICADO', 1)`,
         [item.term, item.definition, item.category]
       );
     }
     await logAudit(req.userId, 'SEED_DICT_TERMS', { count: items.length }, req.ip);
+    
+    if (aiCache) aiCache.clear();
+
     res.json({ seeded: true });
   } catch (err) {
     console.error('dictionary.seed:', err);

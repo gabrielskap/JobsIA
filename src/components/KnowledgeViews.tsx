@@ -1,12 +1,11 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Book, Database, FileCode, Server, Plus, Trash2, X, Edit2, Loader2 } from 'lucide-react';
-import { norms } from '../data/knowledgeBase';
 import { dictionaryService } from '../services/dictionaryService';
 import { normService } from '../services/normService';
 import { jobService } from '../services/jobService';
 import type { DictionaryTerm, NormRule, JobTypeWithParameters, ParameterType } from '../types/database';
 
-const NORMS_TITLE = norms.title;
+const NORMS_TITLE = "Norma N/PD/004/02 - Nomenclatura";
 
 export function DictionaryView() {
   const [dictionary, setDictionary] = useState<DictionaryTerm[]>([]);

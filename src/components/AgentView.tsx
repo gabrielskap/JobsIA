@@ -10,7 +10,6 @@ import { checklistService } from '../services/checklistService';
 import { jobService } from '../services/jobService';
 import { buildCommand } from '../utils/commandBuilder';
 import type { JobTypeWithParameters } from '../types/database';
-import { dictionary, norms } from '../data/knowledgeBase';
 import { useAuth } from '../contexts/AuthContext';
 
 // ── SYSTEM PROMPT ────────────────────────────────────────────────────────────
@@ -194,11 +193,7 @@ export function AgentView() {
     ));
   };
 
-  const buildKnowledgeContext = () => {
-    const dictText = dictionary.map(d => `- ${d.term} (${d.category}): ${d.definition}`).join('\n');
-    const normsText = norms.rules.map(r => `- [${r.environment}] ${r.rule}`).join('\n');
-    return `\n\n## BASE DE CONHECIMENTO\n\n### Dicionário:\n${dictText}\n\n### Normas (${norms.title}):\n${normsText}`;
-  };
+
 
   // ── HANDLE FUNCTION CALL ──────────────────────────────────────────────────
 
@@ -352,12 +347,10 @@ export function AgentView() {
     try {
       const newUserMsg: ChatMessage = { role: 'user', content: input };
       const messages: ChatMessage[] = [...history, newUserMsg];
-      const fullSystemPrompt = systemPrompt + buildKnowledgeContext();
 
       const response = await api.post<LIAResponse>('/ai/chat', {
         messages,
         tools: [GENERATE_CHECKLIST_TOOL],
-        system: fullSystemPrompt,
       });
 
       const assistantMsg = response.choices[0].message;
@@ -387,7 +380,6 @@ export function AgentView() {
 
             const followUp = await api.post<LIAResponse>('/ai/chat', {
               messages: updatedHistory,
-              system: fullSystemPrompt,
             });
 
             const followUpText = followUp.choices[0].message.content;
@@ -496,42 +488,6 @@ export function AgentView() {
 
                 {isKnowledgeExpanded && (
                   <div className="space-y-3">
-                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
-                        Dicionário
-                        <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                          {dictionary.length}
-                        </span>
-                      </p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {dictionary.map(d => (
-                          <div key={d.term} className="text-xs text-slate-600">
-                            <span className="font-semibold text-slate-700">{d.term}</span>
-                            <span className="text-slate-400 ml-1 text-[10px]">({d.category})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
-                        Normas
-                        <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                          {norms.rules.length}
-                        </span>
-                      </p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {norms.rules.map((r, i) => (
-                          <div key={i} className="text-xs text-slate-600">
-                            <span className="font-semibold text-slate-700">[{r.environment}]</span>{' '}
-                            <span className="text-slate-500">
-                              {r.rule.substring(0, 55)}{r.rule.length > 55 ? '…' : ''}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
                     <div className="bg-slate-50 rounded-lg border border-slate-200 p-3">
                       <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1">
                         Jobs Cadastrados

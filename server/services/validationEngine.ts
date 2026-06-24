@@ -124,6 +124,7 @@ export const validationEngine = {
     const { rows: normRules } = await pool.query(
       `SELECT * FROM "JobsIA_validation_rules" 
        WHERE ativo = true 
+         AND status = 'PUBLICADO'
          AND (ambiente = $1 OR ambiente = 'Global')
          AND vigencia_inicio <= now() 
          AND (vigencia_fim IS NULL OR vigencia_fim >= now())`,
