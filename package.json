@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test:schema": "tsx server/tests/schema.test.ts"
+    "test:schema": "tsx server/tests/schema.test.ts",
+    "test:rbac": "tsx server/tests/rbac.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -37,8 +38,10 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.14.0",
     "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.0",
     "autoprefixer": "^10.4.21",
     "docx": "^9.7.1",
+    "supertest": "^7.2.2",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

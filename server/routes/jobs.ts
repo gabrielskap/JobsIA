@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireRole, logAudit, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(requireAuth);
@@ -24,7 +24,7 @@ router.get('/', async (_req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { job, parameters } = req.body;
   const client = await pool.connect();
   try {
@@ -40,8 +40,8 @@ router.post('/', async (req, res) => {
       for (const p of parameters) {
         const { rows: pr } = await client.query(
           `INSERT INTO "JobsIA_parameters"
-           (job_type_id, flag, name, required, description, parameter_type, order_index, data_type, default_value, example_value, validation_regex, active)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+            (job_type_id, flag, name, required, description, parameter_type, order_index, data_type, default_value, example_value, validation_regex, active)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
           [createdJob.id, p.flag ?? null, p.name, p.required, p.description,
            p.parameter_type, p.order_index, p.data_type, p.default_value ?? null,
            p.example_value ?? null, p.validation_regex ?? null, p.active ?? true]
@@ -50,6 +50,7 @@ router.post('/', async (req, res) => {
       }
     }
     await client.query('COMMIT');
+    await logAudit(req.userId, 'CREATE_JOB', { id: createdJob.id, name: createdJob.name }, req.ip);
     res.status(201).json({ ...createdJob, parameters: createdParams });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -60,7 +61,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   const { job, parameters } = req.body;
   const client = await pool.connect();
@@ -83,8 +84,8 @@ router.put('/:id', async (req, res) => {
       for (const p of parameters) {
         const { rows: pr } = await client.query(
           `INSERT INTO "JobsIA_parameters"
-           (job_type_id, flag, name, required, description, parameter_type, order_index, data_type, default_value, example_value, validation_regex, active)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+            (job_type_id, flag, name, required, description, parameter_type, order_index, data_type, default_value, example_value, validation_regex, active)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
           [updatedJob.id, p.flag ?? null, p.name, p.required, p.description,
            p.parameter_type, p.order_index, p.data_type, p.default_value ?? null,
            p.example_value ?? null, p.validation_regex ?? null, p.active ?? true]
@@ -93,6 +94,7 @@ router.put('/:id', async (req, res) => {
       }
     }
     await client.query('COMMIT');
+    await logAudit(req.userId, 'UPDATE_JOB', { id: updatedJob.id, name: updatedJob.name }, req.ip);
     res.json({ ...updatedJob, parameters: updatedParams });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -103,11 +105,12 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   try {
     await pool.query('DELETE FROM "JobsIA_parameters" WHERE job_type_id = $1', [id]);
     await pool.query('DELETE FROM "JobsIA_types" WHERE id = $1', [id]);
+    await logAudit(req.userId, 'DELETE_JOB', { id }, req.ip);
     res.status(204).send();
   } catch (err) {
     console.error('jobs.remove:', err);
@@ -115,10 +118,11 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-router.post('/seed', async (_req, res) => {
+router.post('/seed', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     const { rows } = await pool.query('SELECT COUNT(*) FROM "JobsIA_types"');
     if (Number(rows[0].count) > 0) { res.json({ seeded: false }); return; }
+    await logAudit(req.userId, 'SEED_JOBS', {}, req.ip);
     res.json({ seeded: true });
   } catch (err) {
     console.error('jobs.seed:', err);

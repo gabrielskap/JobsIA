@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireRole, logAudit, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(requireAuth);
@@ -17,13 +17,14 @@ router.get('/', async (_req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { term, definition, category } = req.body;
   try {
     const { rows } = await pool.query(
       `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category) VALUES ($1, $2, $3) RETURNING *`,
       [term, definition, category]
     );
+    await logAudit(req.userId, 'CREATE_DICT_TERM', { id: rows[0].id, term, definition, category }, req.ip);
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('dictionary.create:', err);
@@ -31,7 +32,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { id } = req.params;
   const { term, definition, category } = req.body;
   try {
@@ -40,6 +41,7 @@ router.put('/:id', async (req, res) => {
       [term, definition, category, id]
     );
     if (rows.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
+    await logAudit(req.userId, 'UPDATE_DICT_TERM', { id, term, definition, category }, req.ip);
     res.json(rows[0]);
   } catch (err) {
     console.error('dictionary.update:', err);
@@ -47,9 +49,10 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     await pool.query('DELETE FROM "JobsIA_dictionary_terms" WHERE id = $1', [req.params.id]);
+    await logAudit(req.userId, 'DELETE_DICT_TERM', { id: req.params.id }, req.ip);
     res.status(204).send();
   } catch (err) {
     console.error('dictionary.remove:', err);
@@ -57,7 +60,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-router.post('/seed', async (req, res) => {
+router.post('/seed', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { rows } = await pool.query('SELECT COUNT(*) FROM "JobsIA_dictionary_terms"');
   if (Number(rows[0].count) > 0) { res.json({ seeded: false }); return; }
   const items: { term: string; definition: string; category: string }[] = req.body.items ?? [];
@@ -68,6 +71,7 @@ router.post('/seed', async (req, res) => {
         [item.term, item.definition, item.category]
       );
     }
+    await logAudit(req.userId, 'SEED_DICT_TERMS', { count: items.length }, req.ip);
     res.json({ seeded: true });
   } catch (err) {
     console.error('dictionary.seed:', err);

@@ -19,6 +19,7 @@ DROP TABLE IF EXISTS "JobsIA_dictionary_terms" CASCADE;
 DROP TABLE IF EXISTS "JobsIA_norm_rules" CASCADE;
 DROP TABLE IF EXISTS "JobsIA_system_prompts" CASCADE;
 DROP TABLE IF EXISTS "JobsIA_profiles" CASCADE;
+DROP TABLE IF EXISTS "JobsIA_audit_logs" CASCADE;
 DROP TABLE IF EXISTS "users" CASCADE;
 
 -- 3. Remover types/enums residuais (se existirem)

@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   name          TEXT,
+  role          TEXT NOT NULL DEFAULT 'SOLICITANTE' CONSTRAINT chk_user_role CHECK (role IN ('ADMIN', 'OPERADOR', 'SOLICITANTE')),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -109,6 +110,16 @@ CREATE TABLE IF NOT EXISTS "JobsIA_system_prompts" (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 11. Tabela: JobsIA_audit_logs (Logs de Auditoria Administrativa)
+CREATE TABLE IF NOT EXISTS "JobsIA_audit_logs" (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+  action      TEXT NOT NULL,
+  details     JSONB NOT NULL DEFAULT '{}',
+  ip_address  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- =============================================================================
 -- CRIAÇÃO DE ÍNDICES ADICIONAIS PARA DESEMPENHO E CHAVES ESTRANGEIRAS
 -- =============================================================================
@@ -119,6 +130,8 @@ CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON "JobsIA_conversations"(u
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON "JobsIA_messages"(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_checklists_user_id ON "JobsIA_checklists"(user_id);
 CREATE INDEX IF NOT EXISTS idx_checklists_conversation_id ON "JobsIA_checklists"(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON "JobsIA_audit_logs"(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON "JobsIA_audit_logs"(created_at);
 
 -- =============================================================================
 -- CRIAÇÃO DAS VIEWS DE NEGÓCIO CORRIGIDAS (SEM DEPS DE ENUMS LEGADOS)

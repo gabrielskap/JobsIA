@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireRole, logAudit, type AuthRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(requireAuth);
@@ -18,7 +18,7 @@ router.get('/active', async (_req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { content } = req.body;
   const client = await pool.connect();
   try {
@@ -31,6 +31,8 @@ router.post('/', async (req, res) => {
       [content]
     );
     await client.query('COMMIT');
+    const briefContent = content && content.length > 100 ? content.slice(0, 100) + '...' : content;
+    await logAudit(req.userId, 'UPDATE_SYSTEM_PROMPT', { content: briefContent }, req.ip);
     res.status(201).json({ message: 'Prompt salvo' });
   } catch (err) {
     await client.query('ROLLBACK');

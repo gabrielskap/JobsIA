@@ -14,7 +14,10 @@ router.post('/login', async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      'SELECT id, email, name, password_hash FROM users WHERE email = $1',
+      `SELECT u.id, u.email, u.name, u.password_hash, u.role, COALESCE(p.is_active, true) as is_active
+       FROM users u
+       LEFT JOIN "JobsIA_profiles" p ON p.user_id = u.id
+       WHERE u.email = $1`,
       [email.toLowerCase()]
     );
     const user = rows[0];
@@ -22,8 +25,12 @@ router.post('/login', async (req, res) => {
       res.status(401).json({ message: 'Email ou senha inválidos' });
       return;
     }
+    if (!user.is_active) {
+      res.status(401).json({ message: 'Usuário inativo' });
+      return;
+    }
     const token = jwt.sign({ sub: user.id }, process.env.JWT_SECRET!, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   } catch (err) {
     console.error('auth/login:', err);
     res.status(500).json({ message: 'Erro interno do servidor' });
@@ -31,43 +38,13 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/signup', async (req, res) => {
-  const { name, email, password } = req.body as { name: string; email: string; password: string };
-  if (!name || !email || !password) {
-    res.status(400).json({ message: 'Nome, email e senha são obrigatórios' });
-    return;
-  }
-  if (password.length < 6) {
-    res.status(400).json({ message: 'A senha deve ter pelo menos 6 caracteres' });
-    return;
-  }
-  try {
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (existing.rows.length > 0) {
-      res.status(409).json({ message: 'Este email já está cadastrado' });
-      return;
-    }
-    const password_hash = await bcrypt.hash(password, 12);
-    const { rows } = await pool.query(
-      `INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3)
-       RETURNING id, email, name`,
-      [email.toLowerCase(), password_hash, name]
-    );
-    const user = rows[0];
-    await pool.query(
-      `INSERT INTO "JobsIA_profiles" (user_id, name, email) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-      [user.id, user.name, user.email]
-    );
-    res.status(201).json({ message: 'Conta criada com sucesso' });
-  } catch (err) {
-    console.error('auth/signup:', err);
-    res.status(500).json({ message: 'Erro interno do servidor' });
-  }
+  res.status(403).json({ message: 'Cadastro público desabilitado. Entre em contato com o administrador.' });
 });
 
 router.get('/me', requireAuth, async (req: AuthRequest, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, email, name, created_at FROM users WHERE id = $1',
+      'SELECT id, email, name, role, created_at FROM users WHERE id = $1',
       [req.userId]
     );
     if (!rows[0]) { res.status(404).json({ message: 'Usuário não encontrado' }); return; }
