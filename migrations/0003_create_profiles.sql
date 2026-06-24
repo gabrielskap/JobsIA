@@ -1,7 +1,7 @@
 -- =============================================================================
 -- MIGRATION: 0003_create_profiles.sql
 -- Banco: PostgreSQL
--- Objetivo: Garantir colunas e índices de JobsIA_profiles sem dependências de Supabase Auth
+-- Objetivo: Garantir colunas e índices de JobsIA_profiles sem dependências de provedores de autenticação externos
 -- =============================================================================
 
 BEGIN;
@@ -39,7 +39,7 @@ END $$;
 CREATE INDEX IF NOT EXISTS "JobsIA_profiles_user_id_idx" ON "JobsIA_profiles" (user_id);
 CREATE INDEX IF NOT EXISTS "JobsIA_profiles_email_idx"   ON "JobsIA_profiles" (email);
 
--- 5. Sem RLS e sem triggers de Supabase (autenticação local gerenciada pelo Express)
+-- 5. Sem RLS e sem triggers externos (autenticação local gerenciada pelo Express)
 ALTER TABLE "JobsIA_profiles" DISABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "profiles_select_own"       ON "JobsIA_profiles";

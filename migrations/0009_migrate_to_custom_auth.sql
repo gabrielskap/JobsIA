@@ -40,7 +40,7 @@ BEGIN
 END
 $$;
 
--- 4. Remover trigger e função remanescentes do Supabase se existirem
+-- 4. Remover trigger e função remanescentes da autenticação externa se existirem
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS handle_new_user();
 

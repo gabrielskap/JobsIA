@@ -7,7 +7,7 @@
 
 BEGIN;
 
--- 1. Tabela de Usuários local (substitui o auth.users do Supabase)
+-- 1. Tabela de Usuários local (substitui tabelas externas de autenticação)
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email         TEXT UNIQUE NOT NULL,
