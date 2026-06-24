@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth, type AuthUser } from '../contexts/AuthContext';
 
@@ -115,6 +115,13 @@ export default function LoginPage() {
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
+
+            <p className="text-center text-sm text-slate-500 mt-2">
+              Não tem uma conta?{' '}
+              <Link to="/cadastro" className="text-blue-600 font-semibold hover:underline">
+                Cadastre-se
+              </Link>
+            </p>
           </form>
 
           <p className="text-center text-sm text-slate-500 mt-6">

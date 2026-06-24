@@ -173,12 +173,15 @@ test('Autorização - Deve impedir OPERADOR de visualizar usuários do sistema',
   assert.strictEqual(res.body.message, 'Acesso negado');
 });
 
-test('Autorização - Deve impedir signup público retornando 403', async () => {
+test('Autorização - Deve permitir signup público e criar usuário SOLICITANTE', async () => {
   const res = await request(app)
     .post('/api/auth/signup')
-    .send({ name: 'Curioso', email: 'curioso@jobsia.com', password: 'password123' });
-  assert.strictEqual(res.status, 403);
-  assert.ok(res.body.message.includes('Cadastro público desabilitado'));
+    .send({ name: 'Novo Solicitante', email: 'novo.solicitante@jobsia.com', password: 'password123' });
+  assert.strictEqual(res.status, 201);
+  assert.strictEqual(res.body.message, 'Conta criada com sucesso');
+  assert.ok(res.body.user);
+  assert.strictEqual(res.body.user.email, 'novo.solicitante@jobsia.com');
+  assert.strictEqual(res.body.user.role, 'SOLICITANTE');
 });
 
 // ===========================================================================

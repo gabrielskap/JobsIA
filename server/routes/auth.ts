@@ -38,7 +38,44 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/signup', async (req, res) => {
-  res.status(403).json({ message: 'Cadastro público desabilitado. Entre em contato com o administrador.' });
+  const { name, email, password } = req.body as { name: string; email: string; password: string };
+  if (!name || !email || !password) {
+    res.status(400).json({ message: 'Nome, email e senha são obrigatórios' });
+    return;
+  }
+  if (password.length < 6) {
+    res.status(400).json({ message: 'A senha deve ter pelo menos 6 caracteres' });
+    return;
+  }
+  try {
+    const emailLower = email.toLowerCase();
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [emailLower]);
+    if (existing.rows.length > 0) {
+      res.status(409).json({ message: 'Este email já está cadastrado' });
+      return;
+    }
+    const password_hash = await bcrypt.hash(password, 12);
+    
+    await pool.query('BEGIN');
+    const { rows } = await pool.query(
+      `INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, 'SOLICITANTE')
+       RETURNING id, email, name, role`,
+      [emailLower, password_hash, name]
+    );
+    const user = rows[0];
+    await pool.query(
+      `INSERT INTO "JobsIA_profiles" (user_id, name, email, is_active) VALUES ($1, $2, $3, true)
+       ON CONFLICT (user_id) DO NOTHING`,
+      [user.id, user.name, user.email]
+    );
+    await pool.query('COMMIT');
+    
+    res.status(201).json({ message: 'Conta criada com sucesso', user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('auth/signup:', err);
+    res.status(500).json({ message: 'Erro interno do servidor' });
+  }
 });
 
 router.get('/me', requireAuth, async (req: AuthRequest, res) => {
