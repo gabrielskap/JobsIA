@@ -33,6 +33,18 @@ export const validationEngine = {
       [jobTypeId]
     );
 
+    // Normalizar chaves do objeto de dados de forma case-insensitive baseada nos parâmetros cadastrados
+    for (const param of parameters) {
+      const officialName = param.name;
+      const lowerName = officialName.toLowerCase();
+      const foundKey = Object.keys(data).find(k => k.toLowerCase() === lowerName);
+      if (foundKey !== undefined) {
+        const val = data[foundKey];
+        data[officialName] = val;
+        data[lowerName] = val;
+      }
+    }
+
     // Detectar o ambiente
     const detectedEnv = (data.ambiente || data.environment || 'Unix') as string;
 

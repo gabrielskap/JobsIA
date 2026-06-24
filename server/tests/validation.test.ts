@@ -422,3 +422,23 @@ test('API POST /api/checklists - Salvamento força status Falha Validação se h
   assert.strictEqual(res.status, 201);
   assert.strictEqual(res.body.status, 'Falha Validação'); // Deve ter sido alterado para Falha Validação
 });
+
+test('Motor de Validação - Normalização Case-Insensitive dos Parâmetros', async () => {
+  const data: Record<string, any> = {
+    ambiente: 'Unix',
+    file_name: 'D.CNS.BOE.002.20251016',
+    NUMERO_REGISTRO: '456', // Testando uppercase
+  };
+  
+  const result = await validationEngine.validateChecklist(
+    testJobTypeId,
+    data,
+    testUserId,
+    false
+  );
+  
+  assert.strictEqual(result.passed, true);
+  assert.strictEqual(data['numero_registro'], '456');
+  assert.strictEqual(data['NUMERO_REGISTRO'], '456');
+});
+
