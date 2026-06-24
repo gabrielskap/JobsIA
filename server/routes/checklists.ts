@@ -3,6 +3,7 @@ import { pool } from '../db';
 import { requireAuth, type AuthRequest } from '../middleware/auth';
 import { validationEngine } from '../services/validationEngine';
 import { validateChecklistProposal } from '../schemas/checklistSchema';
+import { pdfService } from '../services/pdfService';
 
 const router = Router();
 router.use(requireAuth);
@@ -263,6 +264,92 @@ router.post('/', async (req: AuthRequest, res) => {
   } catch (err) {
     console.error('checklists.create:', err);
     res.status(500).json({ message: 'Erro ao criar checklist' });
+  }
+});
+
+router.get('/:id/pdf', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 1. Buscar o checklist no banco de dados
+    const { rows } = await pool.query('SELECT * FROM "JobsIA_checklists" WHERE id = $1', [id]);
+    if (rows.length === 0) {
+      res.status(404).json({ message: 'Checklist não encontrado.' });
+      return;
+    }
+    const checklist = rows[0];
+
+    // 2. Aplicar autorização baseada em papéis
+    if (req.user?.role === 'SOLICITANTE' && checklist.user_id !== req.userId) {
+      res.status(403).json({ message: 'Acesso negado.' });
+      return;
+    }
+
+    // 3. Buscar nome do tipo de job se houver
+    let jobTypeName = '';
+    if (checklist.job_type_id) {
+      const { rows: jobRows } = await pool.query('SELECT name FROM "JobsIA_types" WHERE id = $1', [checklist.job_type_id]);
+      if (jobRows.length > 0) {
+        jobTypeName = jobRows[0].name;
+      }
+    }
+
+    // 4. Mapear dados coletados
+    const collected = checklist.data || {};
+    const payload = {
+      id: checklist.id,
+      rqs_rdm: collected.rqs_rdm || collected.rqs || collected.rdm || 'N/A',
+      status: checklist.status,
+      user_name: checklist.user_name || 'Agente de IA',
+      created_at: checklist.created_at,
+      job_type_name: jobTypeName || checklist.type,
+      job_type_id: checklist.job_type_id,
+      command: checklist.command || collected.__command || '',
+      
+      gestor: collected.gestor,
+      solicitante: collected.solicitante,
+      desenvolvedor: collected.desenvolvedor,
+      matricula: collected.matricula,
+      area: collected.area,
+      contato: collected.contato,
+      
+      application: collected.application,
+      periodicidade: collected.periodicidade,
+      tipo_execucao: collected.tipo_execucao,
+      sistema: collected.sistema,
+      rotina: collected.rotina,
+      objetivo: collected.objetivo,
+      quantidade_jobs: collected.quantidade_jobs,
+      
+      sequencia_jobs: collected.sequencia_jobs,
+      ascendencia: collected.ascendencia,
+      descendencia: collected.descendencia,
+      horario_permitido: collected.horario_permitido || collected.horario,
+      feriado_fds: collected.feriado_fds || collected.feriados,
+      simultaneidade: collected.simultaneidade,
+      regras_concorrencia: collected.regras_concorrencia,
+      
+      origem_destino: collected.origem_destino || collected.diretorio_destino || collected.diretorio_origem,
+      servidores: collected.servidores || collected.servidor || collected.servidor_origem,
+      operacao: collected.operacao || collected.get_put,
+      codificacao: collected.codificacao,
+      temporalidade: collected.temporalidade || collected.retencao,
+      
+      errors: checklist.errors || [],
+      warnings: checklist.warnings || [],
+    };
+
+    // 5. Gerar o buffer do PDF
+    const pdfBuffer = pdfService.generateChecklistPDF(payload);
+
+    // 6. Retornar para download
+    const safeFileName = `Checklist_${checklist.type || 'Job'}_${id}.pdf`.replace(/\s+/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('checklists.getPDF:', err);
+    res.status(500).json({ message: 'Erro ao gerar PDF do checklist' });
   }
 });
 

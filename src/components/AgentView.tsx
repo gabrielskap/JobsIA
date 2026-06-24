@@ -3,7 +3,7 @@ import {
   Bot, User, Send, CheckCircle2, Copy, FileDown,
   Settings2, X, Save, MessageSquare, BookOpen, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
-import { createChecklistPDF } from '../utils/pdfGenerator';
+import { downloadChecklistPDF } from '../utils/pdfGenerator';
 import { api } from '../lib/api';
 import { systemPromptService } from '../services/systemPromptService';
 import { checklistService } from '../services/checklistService';
@@ -300,10 +300,8 @@ export function AgentView() {
             </div>
             <button
               onClick={() =>
-                createChecklistPDF(
-                  `${job_name.toUpperCase()} - TIPO ${job_type_id}`,
-                  fields,
-                  [{ label: `Job Tipo ${job_type_id} - ${job_name}`, command }],
+                downloadChecklistPDF(
+                  savedChecklist.id,
                   `Checklist_Tipo${job_type_id}_${job_name.replace(/\s+/g, '_')}.pdf`
                 )
               }

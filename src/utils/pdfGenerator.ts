@@ -1,5 +1,44 @@
 import { jsPDF } from 'jspdf';
+import { getToken } from '../lib/api';
 
+/**
+ * Faz o download do PDF do checklist gerado de forma robusta no backend.
+ */
+export async function downloadChecklistPDF(checklistId: string, saveFileName: string) {
+  try {
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const apiBase = import.meta.env.VITE_API_URL || '/api';
+    const res = await fetch(`${apiBase}/checklists/${checklistId}/pdf`, {
+      headers,
+    });
+    
+    if (!res.ok) {
+      throw new Error('Falha ao baixar PDF do backend');
+    }
+    
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = saveFileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('downloadChecklistPDF erro:', error);
+    alert('Erro ao baixar o PDF do backend. Tentando gerar localmente...');
+  }
+}
+
+/**
+ * Fallback local caso o backend não esteja acessível.
+ */
 export function createChecklistPDF(
   section1Title: string,
   fields: Array<{ label: string; value: string }>,
@@ -32,7 +71,7 @@ export function createChecklistPDF(
 
   doc.setFontSize(8);
   doc.setTextColor(107, 114, 128);
-  doc.text('Gerado automaticamente pelo Agente de IA de Jobs da DATAPREV', margin, 24);
+  doc.text('Gerado automaticamente pelo Agente de IA de Jobs da DATAPREV (Fallback Local)', margin, 24);
 
   doc.setDrawColor(229, 231, 235);
   doc.setLineWidth(0.6);

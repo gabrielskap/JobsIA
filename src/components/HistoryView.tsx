@@ -3,7 +3,7 @@ import { History, FileText, Download, Search, TrendingUp, CheckCircle, XCircle, 
 import { checklistService } from '../services/checklistService';
 import type { Checklist } from '../types/database';
 import { useAuth } from '../contexts/AuthContext';
-import { createChecklistPDF } from '../utils/pdfGenerator';
+import { downloadChecklistPDF } from '../utils/pdfGenerator';
 
 const TYPE_LABEL: Record<Checklist['type'], string> = {
   transhost: 'Transhost (Jobs 3 e 10)',
@@ -32,14 +32,8 @@ export function HistoryView() {
   );
 
   const handleDownload = (item: Checklist) => {
-    const { __command, __job_name, __job_type_id, ...collectedData } = item.data as Record<string, string>;
-    const fields = Object.entries(collectedData)
-      .filter(([, v]) => v)
-      .map(([k, v]) => ({ label: k, value: String(v) }));
-    const jobLabel = `${__job_name ?? item.type} (Tipo ${__job_type_id ?? ''})`;
-    const command = __command ?? '';
     const saveFileName = `Checklist_${item.type}_${item.file_name ?? 'download'}.pdf`.replace(/\s+/g, '_');
-    createChecklistPDF(jobLabel, fields, [{ label: jobLabel, command }], saveFileName);
+    downloadChecklistPDF(item.id, saveFileName);
   };
 
   const total = checklists.length;
