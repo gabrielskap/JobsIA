@@ -1,12 +1,7 @@
 -- =============================================================================
--- MIGRATION: Renomear tabelas para o padrão JobsIA_*
+-- MIGRATION: 0002_rename_tables.sql
 -- Banco: PostgreSQL
--- Data: 2026-05-14
---
--- ATENÇÃO: Execute este script em uma única transação.
--- FK constraints sobrevivem ao rename (PostgreSQL usa OIDs internamente).
--- Views, funções e triggers que referenciam os nomes antigos como strings
--- precisarão ser atualizados manualmente após este script.
+-- Objetivo: Renomear tabelas para o padrão JobsIA_*
 -- =============================================================================
 
 BEGIN;
@@ -39,9 +34,7 @@ ALTER TABLE IF EXISTS checklists RENAME TO "JobsIA_checklists";
 ALTER TABLE IF EXISTS system_prompts RENAME TO "JobsIA_system_prompts";
 
 -- =============================================================================
--- Atualizar nomes de sequences geradas automaticamente (se existirem)
--- Postgres renomeia sequences vinculadas a SERIAL automaticamente no ALTER TABLE,
--- mas sequences criadas manualmente precisam ser renomeadas explicitamente.
+-- Atualizar nomes de sequences geradas automaticamente
 -- =============================================================================
 
 -- Sequences de profiles
@@ -70,18 +63,5 @@ ALTER SEQUENCE IF EXISTS checklists_id_seq RENAME TO "JobsIA_checklists_id_seq";
 
 -- Sequences de system_prompts
 ALTER SEQUENCE IF EXISTS system_prompts_id_seq RENAME TO "JobsIA_system_prompts_id_seq";
-
--- =============================================================================
--- Recriar políticas RLS se referenciarem os nomes antigos como strings.
--- As políticas baseadas em OID sobrevivem automaticamente.
--- Verifique com: SELECT tablename, policyname FROM pg_policies;
--- =============================================================================
-
--- =============================================================================
--- Verificação pós-rename (execute como SELECT para conferir):
--- SELECT table_name FROM information_schema.tables
--- WHERE table_schema = 'public'
--- ORDER BY table_name;
--- =============================================================================
 
 COMMIT;
