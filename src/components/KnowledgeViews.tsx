@@ -3,6 +3,7 @@ import { Book, Database, FileCode, Server, Plus, Trash2, X, Edit2, Loader2 } fro
 import { dictionaryService } from '../services/dictionaryService';
 import { normService } from '../services/normService';
 import { jobService } from '../services/jobService';
+import { useAuth } from '../contexts/AuthContext';
 import type { DictionaryTerm, NormRule, JobTypeWithParameters, ParameterType } from '../types/database';
 
 const NORMS_TITLE = "Norma N/PD/004/02 - Nomenclatura";
@@ -412,6 +413,8 @@ export function NormsView() {
 }
 
 export function JobsView() {
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'ADMIN';
   const [jobsData, setJobsData] = useState<JobTypeWithParameters[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -439,13 +442,14 @@ export function JobsView() {
   });
 
   useEffect(() => {
-    jobService.seedIfEmpty().then(() =>
-      jobService.getAll().then(data => {
-        setJobsData(data);
-        setLoading(false);
-      })
-    );
-  }, []);
+    const load = isAdmin
+      ? jobService.seedIfEmpty().then(() => jobService.getAll())
+      : jobService.getAll();
+    load.then(data => {
+      setJobsData(data);
+      setLoading(false);
+    });
+  }, [isAdmin]);
 
   const resetForm = () => {
     setFormData({ id: '', name: '', script: '', description: '', parameters: [] });
@@ -565,21 +569,23 @@ export function JobsView() {
             Mapeamento dos scripts e parâmetros para a operação.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setIsAdding(!isAdding);
-            setEditingId(null);
-            resetForm();
-          }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
-            isAdding
-              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-              : 'bg-purple-600 text-white hover:bg-purple-700'
-          }`}
-        >
-          {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {isAdding ? 'Cancelar' : 'Novo Tipo de Job'}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => {
+              setIsAdding(!isAdding);
+              setEditingId(null);
+              resetForm();
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
+              isAdding
+                ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                : 'bg-purple-600 text-white hover:bg-purple-700'
+            }`}
+          >
+            {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {isAdding ? 'Cancelar' : 'Novo Tipo de Job'}
+          </button>
+        )}
       </div>
 
       {(isAdding || editingId !== null) && (
@@ -840,22 +846,24 @@ export function JobsView() {
                     {job.script}
                   </code>
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => startEdit(job)}
-                    className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
-                    title="Editar Job"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => removeJob(job.id)}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                    title="Excluir Job"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => startEdit(job)}
+                      className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
+                      title="Editar Job"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => removeJob(job.id)}
+                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                      title="Excluir Job"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="p-4">
                 <p className="text-sm text-slate-600 mb-4">{job.description}</p>
