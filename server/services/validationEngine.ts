@@ -155,6 +155,24 @@ export const validationEngine = {
       }
 
       const valStr = String(fieldVal).trim();
+
+      // Determinar o contexto do arquivo para aplicar a regra correta
+      const isSql = valStr.toLowerCase().endsWith('.sql');
+      const isCDSend = valStr.startsWith('F') && valStr.includes('.MMMMMMMM.');
+      const isCDReceive = /^[A-Z]{3}[A-Z]{3}[0-9]{2}\.[BIE][0-9]{3}\.[DR][0-9]{7}$/.test(valStr);
+      const isCD = isCDSend || isCDReceive;
+
+      // Ignorar regras não aplicáveis ao formato detectado
+      if (rule.codigo === 'RULE-DB-SQL-FORMAT' && !isSql) continue;
+      if (rule.codigo === 'RULE-CD-SEND' && !isCDSend) continue;
+      if (rule.codigo === 'RULE-CD-RECEIVE' && !isCDReceive) continue;
+
+      // Se for SQL ou ConnectDirect, ignorar validações genéricas de nome de arquivo Unix/Windows/Mainframe
+      if ((rule.codigo.includes('PREFIX') || rule.codigo.includes('UPPER-MAX')) &&
+          (rule.codigo.includes('UNIX') || rule.codigo.includes('WIN') || rule.codigo.includes('MAINFRAME'))) {
+        if (isSql || isCD) continue;
+      }
+
       let passed = true;
 
       if (rule.tipo_regra === 'regex' && rule.expressao) {
