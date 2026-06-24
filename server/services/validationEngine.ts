@@ -157,15 +157,23 @@ export const validationEngine = {
       const valStr = String(fieldVal).trim();
 
       // Determinar o contexto do arquivo para aplicar a regra correta
-      const isSql = valStr.toLowerCase().endsWith('.sql');
+      const isSql = valStr.toLowerCase().endsWith('.sql') || /^(pkg|pkgbody|pr|fc|tr)_/i.test(valStr);
       const isCDSend = valStr.startsWith('F') && valStr.includes('.MMMMMMMM.');
       const isCDReceive = /^[A-Z]{3}[A-Z]{3}[0-9]{2}\.[BIE][0-9]{3}\.[DR][0-9]{7}$/.test(valStr);
       const isCD = isCDSend || isCDReceive;
+
+      // Determinar validade de fitas para exclusão mútua
+      const isTapeWinUnix = /^F[DHME][A-Z0-9]{1,8}\/[CDFIN]\/(ON|OF)$/.test(valStr) && valStr.length <= 17;
+      const isTapeUnixDb = /^F[DHME][A-Z0-9]{1,8}[A-Z0-9]{1,6}\/[CDFIN]\/(ON|OF)$/.test(valStr);
 
       // Ignorar regras não aplicáveis ao formato detectado
       if (rule.codigo === 'RULE-DB-SQL-FORMAT' && !isSql) continue;
       if (rule.codigo === 'RULE-CD-SEND' && !isCDSend) continue;
       if (rule.codigo === 'RULE-CD-RECEIVE' && !isCDReceive) continue;
+
+      // Exclusão mútua para fitas magnéticas (evitar falso positivo em validações cruzadas)
+      if (rule.codigo === 'RULE-TAPE-WIN-UNIX' && isTapeUnixDb && !isTapeWinUnix) continue;
+      if (rule.codigo === 'RULE-TAPE-UNIX-DB' && isTapeWinUnix && !isTapeUnixDb) continue;
 
       // Se for SQL ou ConnectDirect, ignorar validações genéricas de nome de arquivo Unix/Windows/Mainframe
       if ((rule.codigo.includes('PREFIX') || rule.codigo.includes('UPPER-MAX')) &&
