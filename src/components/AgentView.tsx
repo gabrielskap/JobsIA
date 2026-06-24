@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, ReactNode } from 'react';
 import {
   Bot, User, Send, CheckCircle2, Copy, FileDown,
-  Settings2, X, Save, MessageSquare, BookOpen, ChevronDown, ChevronUp, RefreshCw
+  Settings2, X, Save, MessageSquare, BookOpen, ChevronDown, ChevronUp, RefreshCw, History
 } from 'lucide-react';
 import { downloadChecklistPDF } from '../utils/pdfGenerator';
 import { api } from '../lib/api';
@@ -119,6 +119,7 @@ type LIAResponse = {
       tool_calls?: ToolCall[];
     };
   }>;
+  conversation_id?: string;
 };
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
@@ -274,8 +275,58 @@ export function AgentView() {
   const [allJobs, setAllJobs] = useState<JobTypeWithParameters[]>([]);
   const [isKnowledgeExpanded, setIsKnowledgeExpanded] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [conversationsList, setConversationsList] = useState<any[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchConversations = async () => {
+    try {
+      const list = await api.get<any[]>('/ai/conversations');
+      setConversationsList(list);
+    } catch (err) {
+      console.error('Erro ao buscar conversas:', err);
+    }
+  };
+
+  const loadConversation = async (convId: string) => {
+    try {
+      setIsLoading(true);
+      const msgs = await api.get<any[]>(`/ai/conversations/${convId}/messages`);
+      setCurrentConversationId(convId);
+
+      const chatMsgs: ChatMessage[] = msgs.map((m: any) => ({
+        role: m.role === 'agent' ? 'assistant' : 'user',
+        content: m.text,
+      }));
+      setChatHistory(chatMsgs);
+
+      const uiMsgs: Message[] = msgs.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        text: m.text,
+        isError: m.is_error,
+      }));
+
+      if (uiMsgs.length === 0) {
+        setMessages([
+          {
+            id: '1',
+            role: 'agent',
+            text: 'Conversa vazia. Como posso te ajudar?',
+          },
+        ]);
+      } else {
+        setMessages(uiMsgs);
+      }
+      setIsHistoryOpen(false);
+    } catch (err) {
+      console.error('Erro ao carregar conversa:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     async function init() {
@@ -288,6 +339,7 @@ export function AgentView() {
         if (!savedPrompt) setSystemPrompt(buildPromptFromJobs(loadedJobs));
       }
       if (savedPrompt) setSystemPrompt(savedPrompt);
+      fetchConversations();
     }
     init();
   }, []);
@@ -449,7 +501,14 @@ export function AgentView() {
       const response = await api.post<LIAResponse>('/ai/chat', {
         messages,
         tools: [GENERATE_CHECKLIST_TOOL],
+        conversation_id: currentConversationId || undefined,
       });
+
+      if (response.conversation_id) {
+        setCurrentConversationId(response.conversation_id);
+        // Atualizar lista em background sem travar
+        fetchConversations();
+      }
 
       const assistantMsg = response.choices[0].message;
       const assistantEntry: ChatMessage = {
@@ -492,6 +551,7 @@ export function AgentView() {
 
             const followUp = await api.post<LIAResponse>('/ai/chat', {
               messages: updatedHistory,
+              conversation_id: response.conversation_id || currentConversationId || undefined,
             });
 
             const followUpText = followUp.choices[0].message.content;
@@ -518,6 +578,7 @@ export function AgentView() {
   // ── HANDLERS ─────────────────────────────────────────────────────────────────
 
   const handleRestart = () => {
+    setCurrentConversationId(null);
     setChatHistory([]);
     setMessages([{
       id: Date.now().toString(),
@@ -640,6 +701,55 @@ export function AgentView() {
         </div>
       )}
 
+      {/* History Panel */}
+      {isHistoryOpen && (
+        <div className="absolute inset-0 z-20 flex justify-end">
+          <div
+            className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setIsHistoryOpen(false)}
+          />
+          <div className="relative w-80 bg-white shadow-2xl h-full border-l border-slate-200 animate-in slide-in-from-right duration-300 flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2 text-slate-800 font-bold">
+                <History className="w-5 h-5 text-blue-600" />
+                Histórico de Chats
+              </div>
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="p-1 hover:bg-slate-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {conversationsList.length === 0 ? (
+                <p className="text-sm text-slate-400 italic text-center mt-8">Nenhuma conversa encontrada</p>
+              ) : (
+                conversationsList.map((c: any) => (
+                  <button
+                    key={c.id}
+                    onClick={() => loadConversation(c.id)}
+                    className={`w-full text-left p-3 rounded-xl border text-sm transition-all hover:bg-slate-50 flex flex-col gap-1 ${
+                      currentConversationId === c.id
+                        ? 'border-blue-500 bg-blue-50/50 text-blue-900'
+                        : 'border-slate-100 text-slate-700 bg-white'
+                    }`}
+                  >
+                    <span className="font-semibold truncate">
+                      Conversa ({c.flow_type || 'Geral'})
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(c.created_at).toLocaleString('pt-BR')}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-slate-50 border-b border-slate-200 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -652,6 +762,17 @@ export function AgentView() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              fetchConversations();
+              setIsHistoryOpen(true);
+            }}
+            className="p-2 hover:bg-slate-200 text-slate-500 rounded-lg transition-all flex items-center gap-2 text-sm font-medium"
+            title="Histórico de conversas"
+          >
+            <History className="w-5 h-5" />
+            <span className="hidden md:inline">Histórico</span>
+          </button>
           <button
             onClick={handleRestart}
             className="p-2 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg transition-all"
