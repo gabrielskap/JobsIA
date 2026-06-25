@@ -368,44 +368,46 @@ export function NormsView() {
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="p-4 font-semibold text-slate-700 w-1/4">Ambiente</th>
-                <th className="p-4 font-semibold text-slate-700">Regra de Validação</th>
-                <th className="p-4 font-semibold text-slate-700 w-24 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {rules.map((rule) => (
-                <tr
-                  key={rule.id}
-                  className={`hover:bg-slate-50 transition-colors group ${editingId === rule.id ? 'bg-emerald-50/30' : ''}`}
-                >
-                  <td className="p-4 font-medium text-slate-800">{rule.environment}</td>
-                  <td className="p-4 text-slate-600 text-sm">{rule.rule}</td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => startEdit(rule)}
-                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                        title="Editar regra"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => removeRule(rule.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                        title="Excluir regra"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[500px]">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="p-4 font-semibold text-slate-700 w-1/4">Ambiente</th>
+                  <th className="p-4 font-semibold text-slate-700">Regra de Validação</th>
+                  <th className="p-4 font-semibold text-slate-700 w-24 text-right">Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {rules.map((rule) => (
+                  <tr
+                    key={rule.id}
+                    className={`hover:bg-slate-50 transition-colors group ${editingId === rule.id ? 'bg-emerald-50/30' : ''}`}
+                  >
+                    <td className="p-4 font-medium text-slate-800">{rule.environment}</td>
+                    <td className="p-4 text-slate-600 text-sm">{rule.rule}</td>
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => startEdit(rule)}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                          title="Editar regra"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => removeRule(rule.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          title="Excluir regra"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

@@ -613,7 +613,7 @@ export function AgentView() {
             className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-300"
             onClick={() => setIsSettingsOpen(false)}
           />
-          <div className="relative w-80 bg-white shadow-2xl h-full border-l border-slate-200 animate-in slide-in-from-right duration-300 flex flex-col">
+          <div className="relative w-full max-w-[320px] sm:w-80 bg-white shadow-2xl h-full border-l border-slate-200 animate-in slide-in-from-right duration-300 flex flex-col">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2 text-slate-800 font-bold">
                 <Settings2 className="w-5 h-5 text-blue-600" />
@@ -626,6 +626,7 @@ export function AgentView() {
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
+            {/* ... Resto permanece idêntico ... */}
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div className="space-y-2">
@@ -707,7 +708,7 @@ export function AgentView() {
             className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-300"
             onClick={() => setIsHistoryOpen(false)}
           />
-          <div className="relative w-80 bg-white shadow-2xl h-full border-l border-slate-200 animate-in slide-in-from-right duration-300 flex flex-col">
+          <div className="relative w-full max-w-[320px] sm:w-80 bg-white shadow-2xl h-full border-l border-slate-200 animate-in slide-in-from-right duration-300 flex flex-col">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2 text-slate-800 font-bold">
                 <History className="w-5 h-5 text-blue-600" />

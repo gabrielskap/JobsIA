@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { NavLink, Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
-import { Book, Bot, FileCode, History, LogOut, Server, Terminal, Users } from 'lucide-react';
+import { Book, Bot, FileCode, History, LogOut, Server, Terminal, Users, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { DictionaryView, JobsView, NormsView } from './components/KnowledgeViews';
 import { AgentView } from './components/AgentView';
 import { HistoryView } from './components/HistoryView';
@@ -23,13 +24,23 @@ const knowledgeItems = [
 
 function AppLayout() {
   const { profile, signOut } = useAuth();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-20 h-16 shrink-0">
+        <div className="px-4 h-full flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {/* Hamburguer menu para mobile */}
+            <button
+              onClick={() => setIsMobileOpen(!isMobileOpen)}
+              className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 md:hidden focus:outline-none"
+              title="Menu"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
             <div className="bg-blue-600 p-2 rounded-lg">
               <Bot className="w-6 h-6 text-white" />
             </div>
@@ -64,58 +75,122 @@ function AppLayout() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-8">
+      {/* Overlay para Mobile */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30 md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      <div className="flex flex-1 relative">
         {/* Sidebar Navigation */}
-        <aside className="w-full md:w-64 shrink-0">
-          <nav className="flex flex-col gap-2 sticky top-24">
-            <div className="flex items-center justify-center px-4 py-3 mb-1 bg-white rounded-xl border border-slate-100 shadow-sm">
+        <aside
+          className={`
+            fixed md:sticky top-16 left-0 z-40 h-[calc(100vh-4rem)] shrink-0
+            bg-white border-r border-slate-200 transition-all duration-300 ease-in-out
+            flex flex-col
+            ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            ${isCollapsed ? 'w-20' : 'w-64'}
+          `}
+        >
+          {/* Header/Toggle da Sidebar em Desktop */}
+          <div className="hidden md:flex items-center justify-between p-4 border-b border-slate-100">
+            {!isCollapsed && (
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Navegação
+              </span>
+            )}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className={`p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors ${isCollapsed ? 'mx-auto' : ''}`}
+              title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {/* Botão fechar para Mobile */}
+          <div className="flex md:hidden items-center justify-between p-4 border-b border-slate-100">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Menu
+            </span>
+            <button
+              onClick={() => setIsMobileOpen(false)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Logo da Dataprev */}
+          <div className={`p-4 ${isCollapsed ? 'flex justify-center' : ''}`}>
+            <div className="flex items-center justify-center p-2 bg-white rounded-xl border border-slate-100 shadow-sm w-full">
               <img
                 src="/Dataprev logo.jpeg"
                 alt="Dataprev"
-                className="h-9 w-auto object-contain"
+                className={`h-9 w-auto object-contain transition-all ${isCollapsed ? 'max-w-[40px]' : ''}`}
               />
             </div>
+          </div>
 
+          <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto">
             {navItems.map(({ to, icon: Icon, label, activeClass }) => (
               <NavLink
                 key={to}
                 to={to}
+                onClick={() => setIsMobileOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                    isActive ? activeClass : 'text-slate-600 hover:bg-slate-100 border border-transparent'
-                  }`
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group relative ${
+                    isActive ? activeClass : 'text-slate-600 hover:bg-slate-50 border border-transparent'
+                  } ${isCollapsed ? 'justify-center' : ''}`
                 }
+                title={isCollapsed ? label : undefined}
               >
-                <Icon className="w-5 h-5" />
-                {label}
+                <Icon className="w-5 h-5 shrink-0" />
+                {!isCollapsed && <span>{label}</span>}
+                {isCollapsed && (
+                  <span className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-md">
+                    {label}
+                  </span>
+                )}
               </NavLink>
             ))}
 
-            <div className="h-px bg-slate-200 my-2 mx-4" />
+            <div className="h-px bg-slate-200 my-2 mx-2" />
 
-            <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Base de Conhecimento
-            </div>
+            {!isCollapsed && (
+              <div className="px-3 py-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Base de Conhecimento
+              </div>
+            )}
 
             {knowledgeItems.map(({ to, icon: Icon, label, activeClass }) => (
               <NavLink
                 key={to}
                 to={to}
+                onClick={() => setIsMobileOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                    isActive ? activeClass : 'text-slate-600 hover:bg-slate-100 border border-transparent'
-                  }`
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group relative ${
+                    isActive ? activeClass : 'text-slate-600 hover:bg-slate-50 border border-transparent'
+                  } ${isCollapsed ? 'justify-center' : ''}`
                 }
+                title={isCollapsed ? label : undefined}
               >
-                <Icon className="w-5 h-5" />
-                {label}
+                <Icon className="w-5 h-5 shrink-0" />
+                {!isCollapsed && <span>{label}</span>}
+                {isCollapsed && (
+                  <span className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-md">
+                    {label}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
         </aside>
 
         {/* Content Area */}
-        <section className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 p-4 md:p-8">
           <Routes>
             <Route path="/" element={<Navigate to="/agente" replace />} />
             <Route path="/agente" element={<AgentView />} />
@@ -125,8 +200,8 @@ function AppLayout() {
             <Route path="/jobs" element={<JobsView />} />
             <Route path="/usuarios" element={<UsersPage />} />
           </Routes>
-        </section>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

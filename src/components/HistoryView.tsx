@@ -325,56 +325,58 @@ export function HistoryView() {
             </p>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
-                <th className="p-4 font-semibold">Tipo de Job</th>
-                <th className="p-4 font-semibold">Arquivo/Alvo</th>
-                <th className="p-4 font-semibold">Data</th>
-                <th className="p-4 font-semibold">Status</th>
-                <th className="p-4 font-semibold text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 text-sm">
-              {filtered.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-4 text-slate-600">{TYPE_LABEL[item.type] ?? item.type}</td>
-                  <td className="p-4 text-slate-600 font-mono text-xs">{item.file_name ?? '—'}</td>
-                  <td className="p-4 text-slate-500">
-                    {new Date(item.created_at).toLocaleString('pt-BR')}
-                  </td>
-                  <td className="p-4">
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
-                        item.status === 'Concluído'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-red-50 text-red-700 border-red-200'
-                      }`}
-                    >
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="p-4 text-right flex justify-end gap-1">
-                    <button
-                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-40"
-                      title="Avaliar ou Registrar Correção"
-                      onClick={() => setSelectedChecklist(item)}
-                    >
-                      <Star className="w-4 h-4 text-amber-500" />
-                    </button>
-                    <button
-                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-40"
-                      title="Baixar PDF"
-                      disabled={item.status !== 'Concluído'}
-                      onClick={() => handleDownload(item)}
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[600px]">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
+                  <th className="p-4 font-semibold">Tipo de Job</th>
+                  <th className="p-4 font-semibold">Arquivo/Alvo</th>
+                  <th className="p-4 font-semibold">Data</th>
+                  <th className="p-4 font-semibold">Status</th>
+                  <th className="p-4 font-semibold text-right">Ação</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200 text-sm">
+                {filtered.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4 text-slate-600">{TYPE_LABEL[item.type] ?? item.type}</td>
+                    <td className="p-4 text-slate-600 font-mono text-xs">{item.file_name ?? '—'}</td>
+                    <td className="p-4 text-slate-500">
+                      {new Date(item.created_at).toLocaleString('pt-BR')}
+                    </td>
+                    <td className="p-4">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                          item.status === 'Concluído'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-red-50 text-red-700 border-red-200'
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right flex justify-end gap-1">
+                      <button
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-40"
+                        title="Avaliar ou Registrar Correção"
+                        onClick={() => setSelectedChecklist(item)}
+                      >
+                        <Star className="w-4 h-4 text-amber-500" />
+                      </button>
+                      <button
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-40"
+                        title="Baixar PDF"
+                        disabled={item.status !== 'Concluído'}
+                        onClick={() => handleDownload(item)}
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
