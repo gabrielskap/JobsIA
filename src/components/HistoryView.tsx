@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { History, FileText, Download, Search, TrendingUp, CheckCircle, XCircle, Activity, Loader2, Star, ThumbsUp, ShieldAlert, Award } from 'lucide-react';
 import { checklistService } from '../services/checklistService';
 import type { Checklist } from '../types/database';

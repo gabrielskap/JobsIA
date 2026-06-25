@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
-import { Book, Bot, FileCode, History, LogOut, Server, Terminal, Users, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Book, Cpu, FileCode, History, LogOut, Server, Terminal, Users, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { DictionaryView, JobsView, NormsView } from './components/KnowledgeViews';
 import { AgentView } from './components/AgentView';
 import { HistoryView } from './components/HistoryView';
@@ -41,13 +41,18 @@ function AppLayout() {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <Bot className="w-6 h-6 text-white" />
+            <div className="bg-white p-1 rounded-lg border border-slate-100 shadow-sm flex items-center justify-center">
+              <img
+                src="/Dataprev logo.jpeg"
+                alt="Dataprev logo"
+                className="h-7 w-auto object-contain"
+              />
             </div>
             <div>
               <h1 className="font-black text-xl leading-tight">
-                <span className="text-slate-900">Jobs</span>
-                <span className="text-yellow-400">IA</span>
+                <span className="text-[#005b9f]">Jobs</span>
+                <span className="text-[#388226]">I</span>
+                <span className="text-[#f09600]">A</span>
               </h1>
             </div>
           </div>
@@ -95,12 +100,7 @@ function AppLayout() {
           `}
         >
           {/* Header/Toggle da Sidebar em Desktop */}
-          <div className="hidden md:flex items-center justify-between p-4 border-b border-slate-100">
-            {!isCollapsed && (
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Navegação
-              </span>
-            )}
+          <div className="hidden md:flex items-center justify-end p-4 border-b border-slate-100">
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className={`p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors ${isCollapsed ? 'mx-auto' : ''}`}
@@ -121,17 +121,6 @@ function AppLayout() {
             >
               <X className="w-5 h-5" />
             </button>
-          </div>
-
-          {/* Logo da Dataprev */}
-          <div className={`p-4 ${isCollapsed ? 'flex justify-center' : ''}`}>
-            <div className="flex items-center justify-center p-2 bg-white rounded-xl border border-slate-100 shadow-sm w-full">
-              <img
-                src="/Dataprev logo.jpeg"
-                alt="Dataprev"
-                className={`h-9 w-auto object-contain transition-all ${isCollapsed ? 'max-w-[40px]' : ''}`}
-              />
-            </div>
           </div>
 
           <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto">
