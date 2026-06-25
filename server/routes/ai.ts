@@ -36,9 +36,63 @@ async function buildConsolidatedPrompt(): Promise<{ prompt: string; promptVersio
     `SELECT id, content, created_at FROM "JobsIA_system_prompts"
      WHERE is_active = true ORDER BY created_at DESC LIMIT 1`
   );
-  const basePromptObj = promptRows[0] || { id: 'default', content: 'Você é o Agente de IA de Jobs da DATAPREV (DIOT).' };
-  const basePrompt = basePromptObj.content;
-  const promptVersion = String(basePromptObj.id);
+  
+  let basePrompt = '';
+  let promptVersion = 'default';
+  
+  if (promptRows.length > 0) {
+    basePrompt = promptRows[0].content;
+    promptVersion = String(promptRows[0].id);
+  } else {
+    // Buscar dinamicamente os tipos de job e parâmetros no banco
+    const { rows: types } = await pool.query(
+      'SELECT * FROM "JobsIA_types" ORDER BY id ASC'
+    );
+    const { rows: params } = await pool.query(
+      'SELECT * FROM "JobsIA_parameters" WHERE active = true ORDER BY job_type_id ASC, order_index ASC'
+    );
+
+    const BASE_SYSTEM_PROMPT = `Você é o Agente de IA de Jobs da DATAPREV (DIOT), especializado em automação de Jobs.
+Sua missão: ajudar o usuário a configurar workloads através de conversa natural e inteligente.
+
+## COMPORTAMENTO
+1. Identifique o tipo de job desejado via conversa natural — sem menus numerados obrigatórios.
+2. Colete TODOS os parâmetros obrigatórios fazendo perguntas contextuais, uma de cada vez.
+3. Para parâmetros opcionais, informe que são opcionais e aceite "nenhum" para pular.
+4. Valide nomes de arquivo conforme a Norma N/PD/004/02 e avise sobre violações (mas permita continuar).
+5. NUNCA chame a função generate_checklist se faltar qualquer parâmetro obrigatório do job (como Application, Operação, Servidor de Origem, Servidor de Destino, etc.). Se houver parâmetros obrigatórios pendentes, continue perguntando por eles um a um até obter tudo.
+6. Quando tiver TODOS os parâmetros obrigatórios confirmados e fornecidos, chame a função generate_checklist.
+7. Após gerar o checklist, pergunte se o usuário precisa de mais alguma coisa.
+
+## NORMA N/PD/004/02 — NOMENCLATURA
+- Prefixo obrigatório: 13 caracteres (T d SIS d SUB d 999)
+- Máximo: 36 caracteres em LETRAS MAIÚSCULAS
+- Unix/Linux: delimitador '.' (ponto) — ex: D.CNS.BOE.002.20251016
+- Windows: delimitador '_' (underscore) — ex: D_SCO_ATU_005_BATIMENTO`;
+
+    const PROMPT_SUFFIX = `
+
+## REGRAS CRÍTICAS
+- Conduza a conversa de forma natural e empática.
+- NUNCA omita ou pule parâmetros obrigatórios do tipo de job. Pergunte por cada um deles antes de chamar generate_checklist.
+- Apenas proponha ou execute a chamada de generate_checklist quando TODOS os dados obrigatórios estiverem devidamente coletados e confirmados.
+- Em collected_data, use exatamente os nomes dos parâmetros conforme definido no mapeamento de jobs abaixo.`;
+
+    const jobsSection = types.map((job: any) => {
+      const collectableParams = params.filter(
+        (p: any) => p.job_type_id === job.id && p.parameter_type !== 'internal' && p.parameter_type !== 'generated'
+      );
+      const paramLines = collectableParams.length > 0
+        ? collectableParams.map((p: any) =>
+            `  - "${p.name}" [${p.required ? 'OBRIGATÓRIO' : 'opcional'}] (${p.data_type}): ${p.description}${p.example_value ? ` (ex: ${p.example_value})` : ''}`
+          ).join('\n')
+        : '  (sem parâmetros para coletar)';
+
+      return `### JOB TIPO ${job.id} — ${job.name}\nScript: ${job.script}\nDescrição: ${job.description}\nParâmetros:\n${paramLines}`;
+    }).join('\n\n');
+
+    basePrompt = `${BASE_SYSTEM_PROMPT}\n\n## JOBS DISPONÍVEIS (${types.length} tipos)\n\n${jobsSection}${PROMPT_SUFFIX}`;
+  }
 
   // 2. Obter as normas publicadas e ativas
   const { rows: normsRows } = await pool.query(

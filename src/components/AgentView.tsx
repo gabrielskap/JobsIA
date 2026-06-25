@@ -108,7 +108,7 @@ type ToolCall = {
 type ChatMessage =
   | { role: 'user'; content: string }
   | { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] }
-  | { role: 'tool'; tool_call_id: string; content: string };
+  | { role: 'tool'; tool_call_id: string; content: string; name?: string };
 
 type LIAResponse = {
   choices: Array<{
@@ -544,6 +544,7 @@ export function AgentView() {
             const toolResultMsg: ChatMessage = {
               role: 'tool',
               tool_call_id: toolCall.id,
+              name: toolCall.function.name,
               content: JSON.stringify({ success, message: toolFeedback }),
             };
             updatedHistory.push(toolResultMsg);
