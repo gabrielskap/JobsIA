@@ -1,6 +1,8 @@
 import express from 'express';
 import { requireAuth, type AuthRequest } from '../middleware/auth';
 import { pool } from '../db';
+import fs from 'fs';
+import path from 'path';
 
 const router = express.Router();
 
@@ -181,6 +183,14 @@ router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
 
     const payload: Record<string, unknown> = { model, messages: allMessages };
     if (tools && tools.length > 0) payload.tools = tools;
+
+    try {
+      fs.writeFileSync(path.join(process.cwd(), 'debug_payload.json'), JSON.stringify(payload, null, 2));
+    } catch (e) {
+      console.error("Erro ao escrever debug_payload.json:", e);
+    }
+
+    console.log("ENVIANDO PAYLOAD PARA LIA API:", JSON.stringify(payload, null, 2));
 
     const apiPath = process.env.LIA_API_PATH || '/api/v1/chat/completions';
     const response = await fetch(`${apiUrl}${apiPath}`, {

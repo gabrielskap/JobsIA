@@ -366,11 +366,14 @@ export function AgentView() {
 
   // ── HANDLE FUNCTION CALL ──────────────────────────────────────────────────
 
-  const handleGenerateChecklist = async (args: {
-    job_type_id: number;
-    job_name: string;
-    collected_data: Record<string, string>;
-  }): Promise<{ success: boolean; status?: string; checklistId?: string; message?: string }> => {
+  const handleGenerateChecklist = async (
+    args: {
+      job_type_id: number;
+      job_name: string;
+      collected_data: Record<string, string>;
+    },
+    convId?: string | null
+  ): Promise<{ success: boolean; status?: string; checklistId?: string; message?: string }> => {
     const { job_type_id, job_name, collected_data } = args;
     const job = allJobs.find(j => j.id === job_type_id);
 
@@ -389,7 +392,7 @@ export function AgentView() {
         request_id: requestId,
         job_type_id,
         collected_data,
-        conversation_id: chatHistory[0]?.conversation_id || null,
+        conversation_id: convId || currentConversationId || null,
       });
     } catch (err) {
       console.error('Erro na chamada do checklistService.create:', err);
@@ -528,7 +531,7 @@ export function AgentView() {
                 throw new Error("Formato inválido de argumentos para a função generate_checklist. Esperado 'job_type_id' e 'collected_data'.");
               }
 
-              const result = await handleGenerateChecklist(args);
+              const result = await handleGenerateChecklist(args, response.conversation_id || currentConversationId);
               if (result && result.success) {
                 success = true;
                 toolFeedback = `Checklist criado com sucesso. Status: ${result.status}. ID: ${result.checklistId}`;
