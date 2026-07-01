@@ -355,9 +355,28 @@ router.get('/:id/pdf', async (req: AuthRequest, res) => {
 
     // 4. Mapear dados coletados
     const collected = checklist.data || {};
+
+    const getField = (keys: string[]) => {
+      for (const k of keys) {
+        if (collected[k] !== undefined) return collected[k];
+        const foundKey = Object.keys(collected).find(
+          ck => ck.toLowerCase().trim() === k.toLowerCase().trim()
+        );
+        if (foundKey && collected[foundKey] !== undefined) return collected[foundKey];
+      }
+      return undefined;
+    };
+
+    const servOrigem = getField(['Servidor de Origem', 'servidor_origem']);
+    const servDest = getField(['Servidor de Destino', 'servidor_destino']);
+    let servidoresVal = getField(['servidores', 'servidor', 'servidor_origem']);
+    if (!servidoresVal && (servOrigem || servDest)) {
+      servidoresVal = `${servOrigem || ''} -> ${servDest || ''}`;
+    }
+
     const payload = {
       id: checklist.id,
-      rqs_rdm: collected.rqs_rdm || collected.rqs || collected.rdm || 'N/A',
+      rqs_rdm: getField(['rqs_rdm', 'rqs', 'rdm', 'RQS / RDM Associada']) || 'N/A',
       status: checklist.status,
       user_name: checklist.user_name || 'Agente de IA',
       created_at: checklist.created_at,
@@ -365,34 +384,34 @@ router.get('/:id/pdf', async (req: AuthRequest, res) => {
       job_type_id: checklist.job_type_id,
       command: checklist.command || collected.__command || '',
       
-      gestor: collected.gestor,
-      solicitante: collected.solicitante,
-      desenvolvedor: collected.desenvolvedor,
-      matricula: collected.matricula,
-      area: collected.area,
-      contato: collected.contato,
+      gestor: getField(['gestor', 'Gestor Responsável', 'Gestor']),
+      solicitante: getField(['solicitante', 'Solicitante']),
+      desenvolvedor: getField(['desenvolvedor', 'Desenvolvedor']),
+      matricula: getField(['matricula', 'Matrícula']),
+      area: getField(['area', 'Área do Processo', 'Área']),
+      contato: getField(['contato', 'Contato / Ramal', 'Contato', 'Ramal']),
       
-      application: collected.application,
-      periodicidade: collected.periodicidade,
-      tipo_execucao: collected.tipo_execucao,
-      sistema: collected.sistema,
-      rotina: collected.rotina,
-      objetivo: collected.objetivo,
-      quantidade_jobs: collected.quantidade_jobs,
+      application: getField(['application', 'Application Nome', 'Application']),
+      periodicidade: getField(['periodicidade', 'Periodicidade de Execução', 'Periodicidade']),
+      tipo_execucao: getField(['tipo_execucao', 'tipo_execução', 'Tipo de Job / Processamento', 'Tipo de Job']),
+      sistema: getField(['sistema', 'Sistema Afetado', 'Sistema']),
+      rotina: getField(['rotina', 'Rotina Operacional', 'Rotina']),
+      objetivo: getField(['objetivo', 'Objetivo Operacional', 'Objetivo']),
+      quantidade_jobs: getField(['quantidade_jobs', 'Quantidade de Jobs', 'Quantidade']),
       
-      sequencia_jobs: collected.sequencia_jobs,
-      ascendencia: collected.ascendencia,
-      descendencia: collected.descendencia,
-      horario_permitido: collected.horario_permitido || collected.horario,
-      feriado_fds: collected.feriado_fds || collected.feriados,
-      simultaneidade: collected.simultaneidade,
-      regras_concorrencia: collected.regras_concorrencia,
+      sequencia_jobs: getField(['sequencia_jobs', 'Sequência dos Jobs', 'Sequencia']),
+      ascendencia: getField(['ascendencia', 'Ascendência (Pré-requisitos)', 'Ascendência', 'Pre-requisitos']),
+      descendencia: getField(['descendencia', 'Descendência (Sucessores)', 'Descendência', 'Sucessores']),
+      horario_permitido: getField(['horario_permitido', 'Horário de Janela Permitida', 'Horario', 'Janela']),
+      feriado_fds: getField(['feriado_fds', 'feriados', 'Executa em Feriados / Finais de Semana?', 'Feriado']),
+      simultaneidade: getField(['simultaneidade', 'Simultaneidade Controlada', 'Simultaneidade']),
+      regras_concorrencia: getField(['regras_concorrencia', 'Regras de Concorrência', 'Concorrencia']),
       
-      origem_destino: collected.origem_destino || collected.diretorio_destino || collected.diretorio_origem,
-      servidores: collected.servidores || collected.servidor || collected.servidor_origem,
-      operacao: collected.operacao || collected.get_put,
-      codificacao: collected.codificacao,
-      temporalidade: collected.temporalidade || collected.retencao,
+      origem_destino: getField(['origem_destino', 'Caminho Físico Origem/Destino', 'diretorio_destino', 'diretorio_origem']),
+      servidores: servidoresVal,
+      operacao: getField(['operacao', 'operação', 'get_put', 'Operação (GET/PUT)', 'Operacao']),
+      codificacao: getField(['codificacao', 'codificação', 'Codificação de Caracteres', 'Codificação']),
+      temporalidade: getField(['temporalidade', 'retencao', 'Temporalidade / Tempo de Retenção', 'Temporalidade']),
       
       errors: checklist.errors || [],
       warnings: checklist.warnings || [],
