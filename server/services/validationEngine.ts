@@ -172,7 +172,9 @@ export const validationEngine = {
 
       // Determinar o contexto do arquivo para aplicar a regra correta
       const isSql = valStr.toLowerCase().endsWith('.sql') || /^(pkg|pkgbody|pr|fc|tr)_/i.test(valStr);
-      const isCDSend = valStr.startsWith('F') && valStr.includes('.MMMMMMMM.');
+      const isCDSend =
+        (valStr.startsWith('F') && valStr.includes('.MMMMMMMM.')) ||
+        /^F[A-Z]{3}[A-Z]{3}[0-9]{2}\.[A-Z0-9]{1,8}\.[BIE][0-9]{3}\.[0-9]{8}\.[0-9]{6}\.[DR][0-9]{7}$/.test(valStr);
       const isCDReceive = /^[A-Z]{3}[A-Z]{3}[0-9]{2}\.[BIE][0-9]{3}\.[DR][0-9]{7}$/.test(valStr);
       const isCD = isCDSend || isCDReceive;
 
@@ -232,7 +234,7 @@ export const validationEngine = {
           passed = rx.test(valStr);
         } else if (rule.expressao === 'cd_send_validation') {
           // F SIS SUB 99 . MMMMMMMM . BXXX . AAAAMMDD . HHMMSS . X NNNNNNN
-          const rx = /^F[A-Z]{3}[A-Z]{3}[0-9]{2}\.MMMMMMMM\.[BIE][0-9]{3}\.[0-9]{8}\.[0-9]{6}\.[DR][0-9]{7}$/;
+          const rx = /^F[A-Z]{3}[A-Z]{3}[0-9]{2}\.([A-Z0-9]{1,8}|MMMMMMMM)\.[BIE][0-9]{3}\.[0-9]{8}\.[0-9]{6}\.[DR][0-9]{7}$/;
           passed = rx.test(valStr);
         } else if (rule.expressao === 'cd_receive_validation') {
           // SIS SUB 99 . BXXX . X NNNNNNN

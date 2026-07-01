@@ -282,6 +282,15 @@ test('Motor de Validação - Connect:Direct Envio Válido (5.4.1)', async () => 
   }, testUserId, false);
 
   assert.strictEqual(result.passed, true);
+
+  // Caso real com identificador dinâmico numérico
+  const resultReal = await validationEngine.validateChecklist(testJobTypeId, {
+    ambiente: 'Unix',
+    file_name: 'FCNSVRC01.20456868.B009.20260624.120000.D0000653',
+    numero_registro: '1234',
+  }, testUserId, false);
+
+  assert.strictEqual(resultReal.passed, true);
 });
 
 test('Motor de Validação - Connect:Direct Recebimento Válido (5.4.2)', async () => {

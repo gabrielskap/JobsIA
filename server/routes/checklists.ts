@@ -180,8 +180,9 @@ router.post('/', async (req: AuthRequest, res) => {
       } else if (collected_data.tape_label || collected_data.rotulo_fita || collected_data.fita) {
         semanticType = 'tape_backup';
       } else if (
-        targetFileLower.startsWith('f') &&
-        (targetFileLower.includes('.mmmmmmmm.') || /^[a-z]{3}[a-z]{3}[0-9]{2}\.[bie][0-9]{3}\.[dr][0-9]{7}$/.test(targetFileLower))
+        (targetFileLower.startsWith('f') && targetFileLower.includes('.mmmmmmmm.')) ||
+        /^f[a-z]{6}[0-9]{2}\.[a-z0-9]{1,8}\.[bie][0-9]{3}\.[0-9]{8}\.[0-9]{6}\.[dr][0-9]{7}$/.test(targetFileLower) ||
+        /^[a-z]{6}[0-9]{2}\.[bie][0-9]{3}\.[dr][0-9]{7}$/.test(targetFileLower)
       ) {
         semanticType = 'connect_direct';
       }
