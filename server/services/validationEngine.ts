@@ -89,12 +89,12 @@ export const validationEngine = {
             });
           }
         } else if (param.data_type === 'date') {
-          const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+          const dateRegex = /^(\d{4}-\d{2}-\d{2}|\d{8})$/;
           if (!dateRegex.test(valStr)) {
             errors.push({
               ruleCode: `PARAM-TYPE-DATE-${param.name.toUpperCase()}`,
               field: param.name,
-              message: `O parâmetro "${param.name}" deve ser uma data no formato YYYY-MM-DD.`,
+              message: `O parâmetro "${param.name}" deve ser uma data no formato YYYY-MM-DD ou YYYYMMDD.`,
               severity: 'BLOQUEANTE',
               value: valStr,
             });

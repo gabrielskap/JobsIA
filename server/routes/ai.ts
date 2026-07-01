@@ -184,11 +184,7 @@ router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
     const payload: Record<string, unknown> = { model, messages: allMessages };
     if (tools && tools.length > 0) payload.tools = tools;
 
-    try {
-      fs.writeFileSync(path.join(process.cwd(), 'debug_payload.json'), JSON.stringify(payload, null, 2));
-    } catch (e) {
-      console.error("Erro ao escrever debug_payload.json:", e);
-    }
+    // Escrita de debug_payload removida para evitar que watchers de arquivos reiniciem o servidor/chat.
 
     console.log("ENVIANDO PAYLOAD PARA LIA API:", JSON.stringify(payload, null, 2));
 

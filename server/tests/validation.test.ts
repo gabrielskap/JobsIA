@@ -316,14 +316,32 @@ test('Motor de Validação - Tipos de Dados e Required do Parâmetro Schema', as
   assert.ok(resultBool.errors.find(e => e.ruleCode.includes('PARAM-TYPE-BOOL')));
 
   // Teste data inválida
-  const resultDate = await validationEngine.validateChecklist(testJobTypeId, {
+  const resultDateInvalid = await validationEngine.validateChecklist(testJobTypeId, {
     ambiente: 'Unix',
     file_name: 'D.CNS.BOE.002.20251016',
     numero_registro: '123',
-    data_execucao: '24-06-2026', // Deve ser YYYY-MM-DD
+    data_execucao: '24-06-2026', // Formato incorreto (DD-MM-YYYY)
   }, testUserId, false);
-  assert.strictEqual(resultDate.passed, false);
-  assert.ok(resultDate.errors.find(e => e.ruleCode.includes('PARAM-TYPE-DATE')));
+  assert.strictEqual(resultDateInvalid.passed, false);
+  assert.ok(resultDateInvalid.errors.find(e => e.ruleCode.includes('PARAM-TYPE-DATE')));
+
+  // Teste data válida formato YYYY-MM-DD
+  const resultDateDash = await validationEngine.validateChecklist(testJobTypeId, {
+    ambiente: 'Unix',
+    file_name: 'D.CNS.BOE.002.20251016',
+    numero_registro: '123',
+    data_execucao: '2026-06-24', // Formato YYYY-MM-DD
+  }, testUserId, false);
+  assert.strictEqual(resultDateDash.passed, true);
+
+  // Teste data válida formato YYYYMMDD
+  const resultDateCompact = await validationEngine.validateChecklist(testJobTypeId, {
+    ambiente: 'Unix',
+    file_name: 'D.CNS.BOE.002.20251016',
+    numero_registro: '123',
+    data_execucao: '20260624', // Formato YYYYMMDD
+  }, testUserId, false);
+  assert.strictEqual(resultDateCompact.passed, true);
 });
 
 test('Motor de Validação - Dependência entre campos', async () => {

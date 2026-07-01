@@ -47,8 +47,8 @@ function buildPromptFromJobs(jobs: JobTypeWithParameters[]): string {
     );
     const paramLines = collectableParams.length > 0
       ? collectableParams.map(p =>
-          `  - "${p.name}" [${p.required ? 'OBRIGATÓRIO' : 'opcional'}] (${p.data_type}): ${p.description}${p.example_value ? ` (ex: ${p.example_value})` : ''}`
-        ).join('\n')
+        `  - "${p.name}" [${p.required ? 'OBRIGATÓRIO' : 'opcional'}] (${p.data_type}): ${p.description}${p.example_value ? ` (ex: ${p.example_value})` : ''}`
+      ).join('\n')
       : '  (sem parâmetros para coletar)';
 
     return `### JOB TIPO ${job.id} — ${job.name}\nScript: ${job.script}\nDescrição: ${job.description}\nParâmetros:\n${paramLines}`;
@@ -126,13 +126,13 @@ type LIAResponse = {
 const formatMessageText = (text: string): ReactNode => {
   // Limpar traços repetidos
   let cleanText = text.replace(/---/g, '');
-  
+
   const lines = cleanText.split('\n');
   const elements: ReactNode[] = [];
-  
+
   let currentTableRows: string[][] = [];
   let inTable = false;
-  
+
   const renderCellText = (cellText: string) => {
     const trimmed = cellText.trim();
     if (!trimmed.includes('**')) return trimmed;
@@ -147,23 +147,23 @@ const formatMessageText = (text: string): ReactNode => {
 
   const flushTable = (key: string | number) => {
     if (currentTableRows.length === 0) return;
-    
+
     // Uma linha separadora de markdown só contém caracteres como |, -, :, e espaços
     const isSeparator = (row: string[]) => {
       return row.every(cell => cell.trim() === '' || /^:?-+:?$/.test(cell.trim()));
     };
-    
+
     // Filtrar linhas separadoras
     const validRows = currentTableRows.filter(row => !isSeparator(row));
-    
+
     if (validRows.length === 0) {
       currentTableRows = [];
       return;
     }
-    
+
     const headerRow = validRows[0];
     const bodyRows = validRows.slice(1);
-    
+
     elements.push(
       <div key={`table-${key}`} className="my-3 overflow-x-auto rounded-xl border border-slate-200 shadow-sm bg-white">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -190,21 +190,21 @@ const formatMessageText = (text: string): ReactNode => {
         </table>
       </div>
     );
-    
+
     currentTableRows = [];
   };
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const isTableLine = line.includes('|');
-    
+
     if (isTableLine) {
       inTable = true;
       let cells = line.split('|');
       // Remover primeiro e último se vazios (típico do markdown)
       if (cells[0].trim() === '') cells.shift();
       if (cells[cells.length - 1]?.trim() === '') cells.pop();
-      
+
       // Filtrar células vazias extras caso venha algo como ||-|-|
       cells = cells.map(c => c.trim());
       currentTableRows.push(cells);
@@ -213,7 +213,7 @@ const formatMessageText = (text: string): ReactNode => {
         flushTable(i);
         inTable = false;
       }
-      
+
       const trimmedLine = line.trim();
       if (trimmedLine.startsWith('###')) {
         const title = trimmedLine.replace(/^###\s*/, '');
@@ -248,11 +248,11 @@ const formatMessageText = (text: string): ReactNode => {
       }
     }
   }
-  
+
   if (inTable) {
     flushTable('end');
   }
-  
+
   return <div className="space-y-1">{elements}</div>;
 };
 
@@ -734,11 +734,10 @@ export function AgentView() {
                   <button
                     key={c.id}
                     onClick={() => loadConversation(c.id)}
-                    className={`w-full text-left p-3 rounded-xl border text-sm transition-all hover:bg-slate-50 flex flex-col gap-1 ${
-                      currentConversationId === c.id
+                    className={`w-full text-left p-3 rounded-xl border text-sm transition-all hover:bg-slate-50 flex flex-col gap-1 ${currentConversationId === c.id
                         ? 'border-blue-500 bg-blue-50/50 text-blue-900'
                         : 'border-slate-100 text-slate-700 bg-white'
-                    }`}
+                      }`}
                   >
                     <span className="font-semibold truncate">
                       Conversa ({c.flow_type || 'Geral'})
@@ -761,8 +760,7 @@ export function AgentView() {
             <Bot className="w-5 h-5 text-blue-700" />
           </div>
           <div>
-            <h2 className="font-semibold text-slate-800">Agente de IA de Jobs</h2>
-            <p className="text-xs text-slate-500">DATAPREV — Automação de Workloads</p>
+            <h2 className="font-semibold text-slate-800">DATAPREV — Automação de Workloads</h2>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -803,20 +801,18 @@ export function AgentView() {
             className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}
           >
             <div
-              className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                msg.role === 'agent' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-              }`}
+              className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${msg.role === 'agent' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                }`}
             >
               {msg.role === 'agent' ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
             </div>
             <div
-              className={`rounded-2xl px-4 py-3 ${
-                msg.role === 'user'
+              className={`rounded-2xl px-4 py-3 ${msg.role === 'user'
                   ? 'bg-blue-600 text-white rounded-tr-sm'
                   : msg.isError
-                  ? 'bg-red-50 text-red-800 border border-red-100 rounded-tl-sm'
-                  : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-sm'
-              }`}
+                    ? 'bg-red-50 text-red-800 border border-red-100 rounded-tl-sm'
+                    : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-sm'
+                }`}
             >
               {typeof msg.text === 'string' ? (
                 <div className="whitespace-pre-wrap leading-relaxed">{formatMessageText(msg.text)}</div>
