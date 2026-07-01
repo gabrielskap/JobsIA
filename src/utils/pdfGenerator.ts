@@ -23,16 +23,14 @@ export async function downloadChecklistPDF(checklistId: string, saveFileName: st
     
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = saveFileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
+    window.open(url, '_blank');
+    // Revoga a URL após 10 segundos para dar tempo do navegador carregar
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 10000);
   } catch (error) {
     console.error('downloadChecklistPDF erro:', error);
-    alert('Erro ao baixar o PDF do backend. Tentando gerar localmente...');
+    alert('Erro ao abrir o PDF do backend.');
   }
 }
 
