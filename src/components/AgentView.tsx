@@ -22,7 +22,8 @@ Sua missão: ajudar o usuário a configurar workloads através de conversa natur
 4. Valide nomes de arquivo conforme a Norma N/PD/004/02 e avise sobre violações (mas permita continuar).
 5. NUNCA chame a função generate_checklist se faltar qualquer parâmetro obrigatório do job (como Application, Operação, Servidor de Origem, Servidor de Destino, etc.). Se houver parâmetros obrigatórios pendentes, continue perguntando por eles um a um até obter tudo.
 6. Quando tiver TODOS os parâmetros obrigatórios confirmados e fornecidos, chame a função generate_checklist.
-7. Após gerar o checklist, pergunte se o usuário precisa de mais alguma coisa.
+7. Após gerar o checklist com sucesso, pergunte se o usuário precisa de mais alguma coisa.
+8. Se a chamada da função generate_checklist retornar falha ou erro de validação (status 'Falha Validação'), NUNCA exiba mensagens de sucesso. Diga ao usuário que a validação falhou, mostre/explique os erros apontados pela função e continue a conversa fazendo as perguntas necessárias para que ele corrija os valores inválidos.
 
 ## NORMA N/PD/004/02 — NOMENCLATURA
 - Prefixo obrigatório: 13 caracteres (T d SIS d SUB d 999)
@@ -373,7 +374,7 @@ export function AgentView() {
       collected_data: Record<string, string>;
     },
     convId?: string | null
-  ): Promise<{ success: boolean; status?: string; checklistId?: string; message?: string }> => {
+  ): Promise<{ success: boolean; status?: string; checklistId?: string; message?: string; errors?: any[]; warnings?: any[] }> => {
     const { job_type_id, job_name, collected_data } = args;
     const job = allJobs.find(j => j.id === job_type_id);
 
@@ -487,7 +488,7 @@ export function AgentView() {
     );
 
     addMessage('agent', resultNode);
-    return { success: true, status: savedChecklist.status, checklistId: savedChecklist.id };
+    return { success: isSuccess, status: savedChecklist.status, checklistId: savedChecklist.id, errors: savedChecklist.errors, warnings: savedChecklist.warnings };
   };
 
   // ── LIA API CALL ─────────────────────────────────────────────────────────────
@@ -536,7 +537,9 @@ export function AgentView() {
                 success = true;
                 toolFeedback = `Checklist criado com sucesso. Status: ${result.status}. ID: ${result.checklistId}`;
               } else {
-                toolFeedback = `Falha na criação do checklist: ${result?.message || 'Erro desconhecido'}`;
+                success = false;
+                const errorDetails = result?.errors?.map((e: any) => `- Campo "${e.field}": ${e.message} (Regra: ${e.ruleCode})`).join('\n') || '';
+                toolFeedback = `Falha na validação do checklist. Status: ${result?.status || 'Falha Validação'}.\nErros de validação:\n${errorDetails}\nPor favor, informe ao usuário sobre estes erros de validação e continue a conversa fazendo as perguntas necessárias para que ele corrija os valores inválidos. NÃO exiba mensagem de sucesso.`;
               }
             } catch (err: any) {
               console.error("Falha ao processar tool call:", err);
