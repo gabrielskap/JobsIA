@@ -11,6 +11,9 @@ services:
     # Expoem apenas a porta HTTP padrao (80) no Host, mapeando para a 8080 do container nao-root
     ports:
       - "80:8080"
+    # Resolve o host 'api' usado no nginx.conf para o IP real da VM backend
+    extra_hosts:
+      - "api:10.10.10.71"
     environment:
       - TZ=America/Sao_Paulo
     # Volumes persistentes para logs do Nginx (acesso e erro)
