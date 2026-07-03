@@ -16,11 +16,6 @@ COPY server/ ./server/
 # Compilar o backend TypeScript para JavaScript na pasta dist-server
 RUN npx tsc -p tsconfig.server.json
 
-# Criar um package.json interno na pasta dist-server com type: commonjs.
-# Isso garante que o Node.js execute os arquivos compilados como CommonJS,
-# permitindo a resolucao correta dos caminhos locais (que nao usam extensao .js no codigo fonte).
-RUN echo '{"type": "commonjs"}' > dist-server/package.json
-
 # ==========================================
 # Estagio 2: Execucao do Backend (Producao)
 # ==========================================
@@ -58,4 +53,4 @@ USER node
 EXPOSE 3001
 
 # Executa as migracoes e inicia o servidor da API
-CMD ["sh", "-c", "npm run migrate && node dist-server/index.js"]
+CMD ["sh", "-c", "node --experimental-specifier-resolution=node dist-server/migrate.js && node --experimental-specifier-resolution=node dist-server/index.js"]
