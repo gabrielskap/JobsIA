@@ -1,14 +1,10 @@
 import { jsPDF } from 'jspdf';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 let logoBase64 = '';
 try {
-  const logoPath = path.resolve(__dirname, '../../public/dataprev-logo.png');
+  const logoPath = path.join(process.cwd(), 'public/dataprev-logo.png');
   if (fs.existsSync(logoPath)) {
     logoBase64 = fs.readFileSync(logoPath).toString('base64');
   }
