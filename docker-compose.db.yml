@@ -1,0 +1,30 @@
+services:
+  # Servico do Banco de Dados PostgreSQL (Producao)
+  db:
+    image: postgres:15-alpine
+    container_name: jobsia_postgres
+    restart: always
+    # Variaveis de configuracao inicial do PostgreSQL
+    environment:
+      POSTGRES_USER: jobsia_user
+      POSTGRES_PASSWORD: Dataprev@123 # ATENÇÃO: Altere para uma senha complexa
+      POSTGRES_DB: jobsia_prod
+    # Expoem a porta padrao do PostgreSQL no host
+    ports:
+      - "5432:5432"
+    # Volume persistente para os dados nao serem perdidos ao reiniciar
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    # Limites de recursos para estabilidade da VM
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1024M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+volumes:
+  pg_data:
+    driver: local
