@@ -27,6 +27,15 @@ async function run() {
       );
     `);
 
+    // Verificar se o banco de dados ja contem a tabela final "JobsIA_profiles"
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'JobsIA_profiles'
+      );
+    `);
+    const isAlreadyStructured = tableCheck.rows[0].exists;
+
     // Listar todos os arquivos da pasta migrations
     if (!fs.existsSync(MIGRATIONS_DIR)) {
       console.error(`❌ Erro: Diretório de migrações não encontrado em: ${MIGRATIONS_DIR}`);
@@ -43,6 +52,17 @@ async function run() {
     // Buscar migrations já aplicadas
     const { rows } = await client.query('SELECT name FROM schema_migrations');
     const appliedMigrations = new Set(rows.map(r => r.name));
+
+    // Se o banco ja possui a estrutura final, mas nao registrou nenhuma migracao na tabela de controle,
+    // nos marcamos todas as migracoes atuais como "ja aplicadas" (baselining automatico).
+    if (isAlreadyStructured && appliedMigrations.size === 0) {
+      console.log('ℹ️ Detectado banco de dados ja estruturado. Executando baselining automatico de migracoes...');
+      for (const file of migrationFiles) {
+        await client.query('INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING', [file]);
+        appliedMigrations.add(file);
+        console.log(`  -> Baselined (marcada como aplicada): ${file}`);
+      }
+    }
 
     let appliedCount = 0;
 
