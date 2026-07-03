@@ -1,16 +1,46 @@
 services:
-  # Servico da API Backend (Express + Node.js)
+  # 1. Servico do Banco de Dados PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: jobsia_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: jobsia_user
+      POSTGRES_PASSWORD: Dataprev@123 # Senha padrão configurada pelo usuário
+      POSTGRES_DB: jobsia_prod
+    ports:
+      - "5432:5432" # Exposto caso precise de acesso externo (ex: DBeaver)
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1024M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobsia_user -d jobsia_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Servico da API Backend (Express + Node.js)
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
     container_name: jobsia_api
     restart: always
-    # Variaveis de ambiente mapeadas a partir do arquivo .env no host
+    depends_on:
+      db:
+        condition: service_healthy
+    # A API não precisa mais expor portas publicamente, pois o frontend conversa com ela internamente
     environment:
       - NODE_ENV=production
       - TZ=America/Sao_Paulo
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql://jobsia_user:Dataprev%40123@db:5432/jobsia_prod?sslmode=disable
       - JWT_SECRET=${JWT_SECRET}
       - PORT=3001
       - CORS_ORIGIN=${CORS_ORIGIN}
@@ -18,10 +48,8 @@ services:
       - LIA_API_KEY=${LIA_API_KEY}
       - LIA_API_MODEL=${LIA_API_MODEL}
       - LIA_API_PATH=${LIA_API_PATH}
-    # Volumes persistentes para logs do backend
     volumes:
       - api_logs:/app/logs
-    # Limites de recursos para garantir estabilidade da VM (CPU/Memoria)
     deploy:
       resources:
         limits:
@@ -30,7 +58,6 @@ services:
         reservations:
           cpus: '0.10'
           memory: 128M
-    # Healthcheck para validar a saude do backend
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
       interval: 20s
@@ -38,26 +65,23 @@ services:
       retries: 3
       start_period: 15s
 
-  # Servico do Frontend (Nginx Unprivileged + React)
+  # 3. Servico do Frontend (Nginx Unprivileged + React)
   web:
     build:
       context: .
       dockerfile: Dockerfile.web
     container_name: jobsia_web
     restart: always
-    # Aguarda o backend estar saudavel antes de iniciar o frontend
     depends_on:
       api:
         condition: service_healthy
-    # Expoem apenas a porta HTTP padrao (80) no Host, mapeando para a 8080 do container nao-root
+    # Mapeamento de porta no host (Porta 80 ou 8080 se rodar junto ao Nginx SSL local)
     ports:
       - "80:8080"
     environment:
       - TZ=America/Sao_Paulo
-    # Volumes persistentes para logs do Nginx (acesso e erro)
     volumes:
       - web_logs:/var/log/nginx
-    # Limites de recursos do frontend
     deploy:
       resources:
         limits:
@@ -66,7 +90,6 @@ services:
         reservations:
           cpus: '0.05'
           memory: 64M
-    # Healthcheck para validar a saude do servidor web
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
       interval: 30s
@@ -74,8 +97,10 @@ services:
       retries: 3
       start_period: 5s
 
-# Volumes nomeados para persistencia de logs locais no Host
+# Volumes nomeados para persistência de dados e logs locais no Host
 volumes:
+  pg_data:
+    driver: local
   api_logs:
     driver: local
   web_logs:
