@@ -1,8 +1,27 @@
+# Dependências e Builds
 node_modules/
 build/
 dist/
+dist-server/
 coverage/
+
+# Sistema Operacional
 .DS_Store
 *.log
+
+# Arquivos de Configuração de Ambiente
 .env*
 !.env.example
+
+# IDEs e Ferramentas Locais
+.vscode/
+.idea/
+.claude/
+.gemini/
+
+# Arquivos Temporários e Backups do Office
+~$*.docx
+~$*.xlsx
+~WRL*.tmp
+*.tmp
+*.temp

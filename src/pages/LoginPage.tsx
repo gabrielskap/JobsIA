@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth, type AuthUser } from '../contexts/AuthContext';
 
@@ -22,8 +22,13 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const { token, user } = await api.post<{ token: string; user: AuthUser }>('/auth/login', { email, password });
-      login(user, token);
+      const { token, refreshToken, user, profile } = await api.post<{
+        token: string;
+        refreshToken: string;
+        user: AuthUser;
+        profile: any;
+      }>('/auth/login', { email, password });
+      login(user, token, refreshToken, profile);
       navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao fazer login');
@@ -79,9 +84,6 @@ export default function LoginPage() {
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between items-center">
                 <label className="text-sm font-medium text-slate-700" htmlFor="password">Senha</label>
-                <button type="button" className="text-sm text-blue-600 hover:underline">
-                  Esqueci minha senha
-                </button>
               </div>
               <div className="relative">
                 <input
@@ -115,6 +117,13 @@ export default function LoginPage() {
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
+
+            <p className="text-center text-sm text-slate-500 mt-2">
+              Não tem uma conta?{' '}
+              <Link to="/cadastro" className="text-blue-600 font-semibold hover:underline">
+                Cadastre-se
+              </Link>
+            </p>
           </form>
 
           <p className="text-center text-sm text-slate-500 mt-6">

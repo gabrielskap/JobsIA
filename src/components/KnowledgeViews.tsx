@@ -1,12 +1,12 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Book, Database, FileCode, Server, Plus, Trash2, X, Edit2, Loader2 } from 'lucide-react';
-import { norms } from '../data/knowledgeBase';
 import { dictionaryService } from '../services/dictionaryService';
 import { normService } from '../services/normService';
 import { jobService } from '../services/jobService';
+import { useAuth } from '../contexts/AuthContext';
 import type { DictionaryTerm, NormRule, JobTypeWithParameters, ParameterType } from '../types/database';
 
-const NORMS_TITLE = norms.title;
+const NORMS_TITLE = "Norma N/PD/004/02 - Nomenclatura";
 
 export function DictionaryView() {
   const [dictionary, setDictionary] = useState<DictionaryTerm[]>([]);
@@ -368,44 +368,46 @@ export function NormsView() {
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="p-4 font-semibold text-slate-700 w-1/4">Ambiente</th>
-                <th className="p-4 font-semibold text-slate-700">Regra de Validação</th>
-                <th className="p-4 font-semibold text-slate-700 w-24 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {rules.map((rule) => (
-                <tr
-                  key={rule.id}
-                  className={`hover:bg-slate-50 transition-colors group ${editingId === rule.id ? 'bg-emerald-50/30' : ''}`}
-                >
-                  <td className="p-4 font-medium text-slate-800">{rule.environment}</td>
-                  <td className="p-4 text-slate-600 text-sm">{rule.rule}</td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => startEdit(rule)}
-                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                        title="Editar regra"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => removeRule(rule.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                        title="Excluir regra"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[500px]">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="p-4 font-semibold text-slate-700 w-1/4">Ambiente</th>
+                  <th className="p-4 font-semibold text-slate-700">Regra de Validação</th>
+                  <th className="p-4 font-semibold text-slate-700 w-24 text-right">Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {rules.map((rule) => (
+                  <tr
+                    key={rule.id}
+                    className={`hover:bg-slate-50 transition-colors group ${editingId === rule.id ? 'bg-emerald-50/30' : ''}`}
+                  >
+                    <td className="p-4 font-medium text-slate-800">{rule.environment}</td>
+                    <td className="p-4 text-slate-600 text-sm">{rule.rule}</td>
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => startEdit(rule)}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                          title="Editar regra"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => removeRule(rule.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          title="Excluir regra"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -413,6 +415,8 @@ export function NormsView() {
 }
 
 export function JobsView() {
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'ADMIN';
   const [jobsData, setJobsData] = useState<JobTypeWithParameters[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -440,13 +444,14 @@ export function JobsView() {
   });
 
   useEffect(() => {
-    jobService.seedIfEmpty().then(() =>
-      jobService.getAll().then(data => {
-        setJobsData(data);
-        setLoading(false);
-      })
-    );
-  }, []);
+    const load = isAdmin
+      ? jobService.seedIfEmpty().then(() => jobService.getAll())
+      : jobService.getAll();
+    load.then(data => {
+      setJobsData(data);
+      setLoading(false);
+    });
+  }, [isAdmin]);
 
   const resetForm = () => {
     setFormData({ id: '', name: '', script: '', description: '', parameters: [] });
@@ -566,21 +571,23 @@ export function JobsView() {
             Mapeamento dos scripts e parâmetros para a operação.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setIsAdding(!isAdding);
-            setEditingId(null);
-            resetForm();
-          }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
-            isAdding
-              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-              : 'bg-purple-600 text-white hover:bg-purple-700'
-          }`}
-        >
-          {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {isAdding ? 'Cancelar' : 'Novo Tipo de Job'}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => {
+              setIsAdding(!isAdding);
+              setEditingId(null);
+              resetForm();
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
+              isAdding
+                ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                : 'bg-purple-600 text-white hover:bg-purple-700'
+            }`}
+          >
+            {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {isAdding ? 'Cancelar' : 'Novo Tipo de Job'}
+          </button>
+        )}
       </div>
 
       {(isAdding || editingId !== null) && (
@@ -841,22 +848,24 @@ export function JobsView() {
                     {job.script}
                   </code>
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => startEdit(job)}
-                    className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
-                    title="Editar Job"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => removeJob(job.id)}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                    title="Excluir Job"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => startEdit(job)}
+                      className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
+                      title="Editar Job"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => removeJob(job.id)}
+                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                      title="Excluir Job"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="p-4">
                 <p className="text-sm text-slate-600 mb-4">{job.description}</p>

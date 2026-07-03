@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Servico da API Backend (Express + Node.js)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: jobsia_api
+    restart: always
+    # Variaveis de ambiente mapeadas a partir do arquivo .env no host
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Sao_Paulo
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - PORT=3001
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      - LIA_API_URL=${LIA_API_URL}
+      - LIA_API_KEY=${LIA_API_KEY}
+      - LIA_API_MODEL=${LIA_API_MODEL}
+      - LIA_API_PATH=${LIA_API_PATH}
+    # Volumes persistentes para logs do backend
+    volumes:
+      - api_logs:/app/logs
+    # Limites de recursos para garantir estabilidade da VM (CPU/Memoria)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+    # Healthcheck para validar a saude do backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Servico do Frontend (Nginx Unprivileged + React)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: jobsia_web
+    restart: always
+    # Aguarda o backend estar saudavel antes de iniciar o frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    # Expoem apenas a porta HTTP padrao (80) no Host, mapeando para a 8080 do container nao-root
+    ports:
+      - "80:8080"
+    environment:
+      - TZ=America/Sao_Paulo
+    # Volumes persistentes para logs do Nginx (acesso e erro)
+    volumes:
+      - web_logs:/var/log/nginx
+    # Limites de recursos do frontend
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    # Healthcheck para validar a saude do servidor web
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+# Volumes nomeados para persistencia de logs locais no Host
+volumes:
+  api_logs:
+    driver: local
+  web_logs:
+    driver: local

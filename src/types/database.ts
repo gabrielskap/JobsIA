@@ -5,6 +5,9 @@ export interface Profile {
   user_id: string;
   name: string;
   email: string;
+  role?: string;
+  matricula?: string;
+  is_active?: boolean;
   created_at: string;
 }
 
@@ -17,12 +20,26 @@ export interface DictionaryTerm {
   created_at: string;
 }
 
-// Tabela: JobsIA_norm_rules
+// Tabela: JobsIA_norm_rules (agora mapeia a view/JobsIA_validation_rules)
 export interface NormRule {
   id: string;
   environment: string;
   rule: string;
   created_at: string;
+  status?: string;
+  version?: number;
+  previous_version_id?: string;
+  active?: boolean;
+  texto_orientacao?: string;
+  secao?: string;
+  codigo?: string;
+  campo_alvo?: string;
+  tipo_regra?: string;
+  severidade?: string;
+  mensagem?: string;
+  expressao?: string;
+  aplicabilidade_job?: number[];
+  casos_teste?: any;
 }
 
 // Tabela: JobsIA_types
@@ -86,6 +103,13 @@ export interface Checklist {
   user_id?: string;
   file_name?: string;
   created_at: string;
+  semantic_type?: string;
+  job_type_id?: number;
+  target_file?: string;
+  request_id?: string;
+  errors?: Array<{ ruleCode: string; field: string; message: string; severity: string }>;
+  warnings?: Array<{ ruleCode: string; field: string; message: string; severity: string }>;
+  command?: string;
 }
 
 // Tabela: JobsIA_system_prompts
