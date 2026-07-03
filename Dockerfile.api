@@ -1,0 +1,61 @@
+# ==========================================
+# Estagio 1: Build do Backend (TypeScript)
+# ==========================================
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+# Copiar arquivos de dependencias para instalacao limpa
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copiar configuracoes do TypeScript e codigo do servidor
+COPY tsconfig.json tsconfig.server.json ./
+COPY server/ ./server/
+
+# Compilar o backend TypeScript para JavaScript na pasta dist-server
+RUN npx tsc -p tsconfig.server.json
+
+# Criar um package.json interno na pasta dist-server com type: commonjs.
+# Isso garante que o Node.js execute os arquivos compilados como CommonJS,
+# permitindo a resolucao correta dos caminhos locais (que nao usam extensao .js no codigo fonte).
+RUN echo '{"type": "commonjs"}' > dist-server/package.json
+
+# ==========================================
+# Estagio 2: Execucao do Backend (Producao)
+# ==========================================
+FROM node:20-alpine
+
+# Instalar pacotes de Timezone (tzdata) para America/Sao_Paulo
+RUN apk add --no-cache tzdata \
+    && cp /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime \
+    && echo "America/Sao_Paulo" > /etc/timezone
+
+# Definir variaveis de ambiente
+ENV NODE_ENV=production
+ENV TZ=America/Sao_Paulo
+ENV PORT=3001
+
+WORKDIR /app
+
+# Copiar dependencias e instalar apenas pacotes de producao
+COPY package.json package-lock.json ./
+RUN npm ci --only=production
+
+# Copiar codigo compilado do estagio 1
+COPY --from=build /app/dist-server ./dist-server
+
+# Copiar a pasta de migrations (necessaria para o script de migracao automatica)
+COPY migrations/ ./migrations/
+
+# Criar pasta para logs persistentes e ajustar permissoes para o usuario nao-root (node)
+RUN mkdir -p /app/logs && chown -R node:node /app
+
+# Mudar para o usuario nao-root
+USER node
+
+# Expor a porta em que a API ira rodar
+EXPOSE 3001
+
+# Executa as migracoes e inicia o servidor da API
+CMD ["sh", "-c", "npm run migrate && node dist-server/index.js"]
