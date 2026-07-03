@@ -132,6 +132,62 @@ ${normsText || '(Nenhuma norma publicada)'}`;
   };
 }
 
+function sanitizeMessagesForBedrock(messages: any[]): any[] {
+  if (!messages || messages.length === 0) return [];
+
+  // Criar uma cópia rasa das mensagens para evitar mutar o req.body original
+  const sanitized = messages.map(msg => ({ ...msg }));
+  const lastIdx = sanitized.length - 1;
+  const isLastTool = sanitized[lastIdx]?.role === 'tool';
+
+  // Se a última mensagem for 'tool', mantemos as duas últimas (a chamada e o resultado) intactas.
+  // Caso contrário, podemos sanitizar todo o histórico antigo.
+  const safeCount = isLastTool ? 2 : 0;
+  const limit = sanitized.length - safeCount;
+
+  for (let i = 0; i < limit; i++) {
+    const msg = sanitized[i];
+    if (msg.role === 'tool') {
+      sanitized[i] = {
+        role: 'user',
+        content: `[Resultado da ferramenta ${msg.name || 'executada'}]: ${msg.content}`
+      };
+    } else if (msg.role === 'assistant' && msg.tool_calls) {
+      sanitized[i] = {
+        role: 'assistant',
+        content: msg.content || 'Configurando checklist do job...'
+      };
+      delete (sanitized[i] as any).tool_calls;
+    }
+  }
+
+  // Mesclar mensagens consecutivas que possuem o mesmo role
+  const merged: any[] = [];
+  for (const msg of sanitized) {
+    if (merged.length > 0 && merged[merged.length - 1].role === msg.role) {
+      const prev = merged[merged.length - 1];
+      const prevContent = typeof prev.content === 'string' 
+        ? prev.content 
+        : (prev.content ? JSON.stringify(prev.content) : '');
+      const currContent = typeof msg.content === 'string' 
+        ? msg.content 
+        : (msg.content ? JSON.stringify(msg.content) : '');
+
+      prev.content = prevContent && currContent 
+        ? `${prevContent}\n\n${currContent}` 
+        : (prevContent || currContent || '');
+
+      if (msg.tool_calls) {
+        prev.tool_calls = [...(prev.tool_calls || []), ...msg.tool_calls];
+      }
+    } else {
+      merged.push(msg);
+    }
+  }
+
+  return merged;
+}
+
 router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
   const { messages, tools, conversation_id } = req.body as {
     messages: any[];
@@ -180,7 +236,8 @@ router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
 
     const { prompt: systemPrompt, promptVersion, normsVersion, dictVersion } = promptData;
 
-    const allMessages = [{ role: 'system', content: systemPrompt }, ...messages];
+    const sanitizedMessages = sanitizeMessagesForBedrock(messages);
+    const allMessages = [{ role: 'system', content: systemPrompt }, ...sanitizedMessages];
 
     const payload: Record<string, unknown> = { model, messages: allMessages };
     if (tools && tools.length > 0) payload.tools = tools;
