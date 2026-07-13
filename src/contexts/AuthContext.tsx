@@ -33,7 +33,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!getToken()) { setLoading(false); return; }
     api.get<{ user: AuthUser; profile: Profile | null }>('/auth/me')
-      .then(({ user: u, profile: p }) => { setUser(u); setProfile(p); })
+      .then(({ user: u, profile: p }) => {
+        setUser(u);
+        if (p && u.role) {
+          p.role = u.role;
+        }
+        setProfile(p);
+      })
       .catch(() => { clearToken(); clearRefreshToken(); })
       .finally(() => setLoading(false));
   }, []);
@@ -42,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(token);
     setRefreshToken(refreshToken);
     setUser(u);
+    if (p && u.role) {
+      p.role = u.role;
+    }
     setProfile(p);
   }
 

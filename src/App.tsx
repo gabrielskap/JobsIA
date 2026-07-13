@@ -60,12 +60,21 @@ function AppLayout() {
           <div className="flex items-center gap-3">
             {profile && (
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold text-xs uppercase">
+                <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold text-sm uppercase">
                   {profile.name?.charAt(0) ?? profile.email.charAt(0)}
                 </div>
-                <span className="text-sm font-medium text-slate-700 hidden sm:block">
-                  {profile.name || profile.email}
-                </span>
+                <div className="hidden sm:flex flex-col items-start justify-center">
+                  <span className="text-sm font-semibold text-slate-700 leading-tight">
+                    {profile.name || profile.email}
+                  </span>
+                  <span className="text-xs text-slate-400 font-medium leading-tight">
+                    {profile.role?.toUpperCase() === 'ADMIN'
+                      ? 'Administrador'
+                      : profile.role?.toUpperCase() === 'OPERADOR'
+                        ? 'Operador'
+                        : 'Solicitante'}
+                  </span>
+                </div>
               </div>
             )}
             <button
