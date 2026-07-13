@@ -738,8 +738,8 @@ export function AgentView() {
                     key={c.id}
                     onClick={() => loadConversation(c.id)}
                     className={`w-full text-left p-3 rounded-xl border text-sm transition-all hover:bg-slate-50 flex flex-col gap-1 ${currentConversationId === c.id
-                        ? 'border-blue-500 bg-blue-50/50 text-blue-900'
-                        : 'border-slate-100 text-slate-700 bg-white'
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-900'
+                      : 'border-slate-100 text-slate-700 bg-white'
                       }`}
                   >
                     <span className="font-semibold truncate">
@@ -763,7 +763,7 @@ export function AgentView() {
             <Bot className="w-5 h-5 text-blue-700" />
           </div>
           <div>
-            <h2 className="font-semibold text-slate-800">DATAPREV — Automação de Workloads</h2>
+            <h2 className="font-semibold text-slate-800">DATAPREV</h2>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -811,10 +811,10 @@ export function AgentView() {
             </div>
             <div
               className={`rounded-2xl px-4 py-3 ${msg.role === 'user'
-                  ? 'bg-blue-600 text-white rounded-tr-sm'
-                  : msg.isError
-                    ? 'bg-red-50 text-red-800 border border-red-100 rounded-tl-sm'
-                    : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-sm'
+                ? 'bg-blue-600 text-white rounded-tr-sm'
+                : msg.isError
+                  ? 'bg-red-50 text-red-800 border border-red-100 rounded-tl-sm'
+                  : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-sm'
                 }`}
             >
               {typeof msg.text === 'string' ? (

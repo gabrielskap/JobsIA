@@ -45,10 +45,10 @@ export default function LoginPage() {
           <DataprevLogo />
           <div className="mt-8">
             <h1 className="text-5xl font-black leading-tight">
-              <span className="text-slate-900">Jobs</span>
-              <span className="text-yellow-400">IA</span>
+              <span className="text-[#005b9f]">Jobs</span>
+              <span className="text-[#388226]">I</span>
+              <span className="text-[#f09600]">A</span>
             </h1>
-            <h2 className="text-4xl font-black text-blue-600 mt-1">Dataprev</h2>
             <div className="w-10 h-1 bg-yellow-400 mt-4 mb-6" />
             <p className="text-slate-600 text-base leading-relaxed">
               Solução inteligente da Dataprev para apoiar a execução de Jobs, automatizando checklists,
@@ -119,11 +119,9 @@ export default function LoginPage() {
             </button>
 
             <p className="text-center text-sm text-slate-500 mt-2">
-              Não tem uma conta?{' '}
-              <Link to="/cadastro" className="text-blue-600 font-semibold hover:underline">
-                Cadastre-se
-              </Link>
+              Não possui conta? <span className="font-medium text-slate-700">Solicite acesso ao administrador</span>.
             </p>
+
           </form>
 
           <p className="text-center text-sm text-slate-500 mt-6">
