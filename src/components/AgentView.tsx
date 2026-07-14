@@ -265,7 +265,7 @@ export function AgentView() {
     {
       id: '1',
       role: 'agent',
-      text: 'Olá! Sou o Agente de IA de Jobs da DATAPREV.\n\nPosso te ajudar a configurar qualquer tipo de workload. É só me dizer o que você precisa!',
+      text: 'Olá! Sou o Agente de IA de Jobs da DATAPREV.\n\nComo Posso te ajudar?',
     },
   ]);
   const [inputValue, setInputValue] = useState('');
