@@ -102,6 +102,7 @@ export interface Checklist {
   data: Record<string, unknown>;
   status: 'Concluído' | 'Falha Validação';
   user_id?: string;
+  user_name?: string;
   file_name?: string;
   created_at: string;
   semantic_type?: string;

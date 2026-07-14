@@ -11,18 +11,35 @@ router.use(requireAuth);
 router.get('/', async (req: AuthRequest, res) => {
   try {
     const userRole = req.user?.role;
-    let query = 'SELECT * FROM "JobsIA_checklists" ORDER BY created_at DESC';
+    let query = `
+      SELECT c.*, COALESCE(u.name, c.user_name) as user_name 
+      FROM "JobsIA_checklists" c 
+      LEFT JOIN users u ON c.user_id = u.id 
+      ORDER BY c.created_at DESC
+    `;
     const params: unknown[] = [];
 
     if (userRole === 'SOLICITANTE') {
       // Solicitante só acessa os próprios checklists
-      query = 'SELECT * FROM "JobsIA_checklists" WHERE user_id = $1 ORDER BY created_at DESC';
+      query = `
+        SELECT c.*, COALESCE(u.name, c.user_name) as user_name 
+        FROM "JobsIA_checklists" c 
+        LEFT JOIN users u ON c.user_id = u.id 
+        WHERE c.user_id = $1 
+        ORDER BY c.created_at DESC
+      `;
       params.push(req.userId);
     } else {
       // ADMIN ou OPERADOR podem acessar checklists de outros usuários filtrando via query string
       const { userId } = req.query as { userId?: string };
       if (userId) {
-        query = 'SELECT * FROM "JobsIA_checklists" WHERE user_id = $1 ORDER BY created_at DESC';
+        query = `
+          SELECT c.*, COALESCE(u.name, c.user_name) as user_name 
+          FROM "JobsIA_checklists" c 
+          LEFT JOIN users u ON c.user_id = u.id 
+          WHERE c.user_id = $1 
+          ORDER BY c.created_at DESC
+        `;
         params.push(userId);
       }
     }

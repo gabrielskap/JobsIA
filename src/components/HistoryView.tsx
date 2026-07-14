@@ -331,6 +331,7 @@ export function HistoryView() {
                 <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
                   <th className="p-4 font-semibold">Tipo de Job</th>
                   <th className="p-4 font-semibold">Arquivo/Alvo</th>
+                  <th className="p-4 font-semibold">Responsável</th>
                   <th className="p-4 font-semibold">Data</th>
                   <th className="p-4 font-semibold">Status</th>
                   <th className="p-4 font-semibold text-right">Ação</th>
@@ -341,6 +342,7 @@ export function HistoryView() {
                   <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-4 text-slate-600">{TYPE_LABEL[item.type] ?? item.type}</td>
                     <td className="p-4 text-slate-600 font-mono text-xs">{item.file_name ?? '—'}</td>
+                    <td className="p-4 text-slate-500 font-medium">{item.user_name || '—'}</td>
                     <td className="p-4 text-slate-500">
                       {new Date(item.created_at).toLocaleString('pt-BR')}
                     </td>
