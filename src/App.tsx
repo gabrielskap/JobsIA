@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { NavLink, Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
-import { Book, Cpu, FileCode, History, LogOut, Server, Terminal, Users, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Book, Cpu, FileCode, History, LogOut, Server, Terminal, Users, Menu, X, ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
 import { DictionaryView, JobsView, NormsView } from './components/KnowledgeViews';
 import { AgentView } from './components/AgentView';
 import { HistoryView } from './components/HistoryView';
+import { HelpView } from './components/HelpView';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import UsersPage from './pages/UsersPage';
@@ -20,6 +21,7 @@ const knowledgeItems = [
   { to: '/dicionario', icon: Book,     label: 'Dicionário de Dados',  activeClass: 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm' },
   { to: '/normas',     icon: FileCode, label: 'Norma N/PD/004/02',    activeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm' },
   { to: '/jobs',       icon: Server,   label: 'Mapeamento de Jobs',   activeClass: 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm' },
+  { to: '/ajuda',      icon: HelpCircle, label: 'Ajuda / Manual',      activeClass: 'bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm' },
 ] as const;
 
 function AppLayout() {
@@ -197,6 +199,7 @@ function AppLayout() {
             <Route path="/normas" element={<NormsView />} />
             <Route path="/jobs" element={<JobsView />} />
             <Route path="/usuarios" element={<UsersPage />} />
+            <Route path="/ajuda" element={<HelpView />} />
           </Routes>
         </main>
       </div>
