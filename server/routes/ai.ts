@@ -259,7 +259,8 @@ router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
 
     if (!response.ok) {
       const error = await response.text();
-      res.status(response.status).json({ error });
+      const status = (response.status === 401 || response.status === 403) ? 502 : response.status;
+      res.status(status).json({ error: `Erro na LIA API: ${error}` });
       return;
     }
 
@@ -310,7 +311,8 @@ router.get('/models', requireAuth, async (req: AuthRequest, res) => {
     });
     if (!response.ok) {
       const error = await response.text();
-      res.status(response.status).json({ error });
+      const status = (response.status === 401 || response.status === 403) ? 502 : response.status;
+      res.status(status).json({ error: `Erro na LIA API: ${error}` });
       return;
     }
     const data = await response.json();
