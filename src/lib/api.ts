@@ -60,6 +60,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         clearRefreshToken();
         window.location.href = '/login';
       }
+    } else {
+      clearToken();
+      clearRefreshToken();
+      window.location.href = '/login';
     }
   }
 
