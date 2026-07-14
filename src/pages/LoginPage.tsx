@@ -118,9 +118,17 @@ export default function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
 
-            <p className="text-center text-sm text-slate-500 mt-2">
-              Não possui conta? <span className="font-medium text-slate-700">Solicite acesso ao administrador</span>.
-            </p>
+            <div className="flex flex-col gap-2 mt-2">
+              <Link
+                to="/cadastro"
+                className="w-full text-center border border-slate-200 text-slate-700 font-semibold py-3 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+              >
+                Criar Usuário
+              </Link>
+              <p className="text-center text-xs text-slate-500">
+                Ou solicite acesso ao administrador.
+              </p>
+            </div>
 
           </form>
 
