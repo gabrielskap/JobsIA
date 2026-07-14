@@ -189,15 +189,16 @@ function sanitizeMessagesForBedrock(messages: any[]): any[] {
 }
 
 router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
-  const { messages, tools, conversation_id } = req.body as {
+  const { messages, tools, conversation_id, model: reqModel } = req.body as {
     messages: any[];
     tools?: unknown[];
     conversation_id?: string;
+    model?: string;
   };
 
   const apiKey = process.env.LIA_API_KEY;
   const apiUrl = process.env.LIA_API_URL;
-  const model = process.env.LIA_API_MODEL || 'claude-sonnet';
+  const model = reqModel || process.env.LIA_API_MODEL || 'claude-sonnet';
 
   if (!apiKey || !apiUrl) {
     res.status(500).json({ error: 'LIA API não configurada no servidor' });
@@ -289,6 +290,53 @@ router.post('/chat', requireAuth, async (req: AuthRequest, res) => {
   } catch (err) {
     console.error('LIA API error:', err);
     res.status(500).json({ error: 'Erro ao contatar a LIA API' });
+  }
+});
+
+// Obter modelos da LIA API
+router.get('/models', requireAuth, async (req: AuthRequest, res) => {
+  const apiKey = process.env.LIA_API_KEY;
+  const apiUrl = process.env.LIA_API_URL;
+  if (!apiKey || !apiUrl) {
+    res.status(500).json({ error: 'LIA API não configurada no servidor' });
+    return;
+  }
+  try {
+    const response = await fetch(`${apiUrl}/api/models`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      res.status(response.status).json({ error });
+      return;
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('LIA API models error:', err);
+    res.status(500).json({ error: 'Erro ao buscar modelos na LIA API' });
+  }
+});
+
+// Salvar preferência de modelo do usuário
+router.post('/preferences', requireAuth, async (req: AuthRequest, res) => {
+  const { selectedModel } = req.body as { selectedModel: string };
+  if (!selectedModel) {
+    res.status(400).json({ error: 'selectedModel é obrigatório' });
+    return;
+  }
+  try {
+    await pool.query(
+      `UPDATE "JobsIA_profiles" SET selected_model = $1 WHERE user_id = $2`,
+      [selectedModel, req.userId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao salvar modelo selecionado:', err);
+    res.status(500).json({ error: 'Erro ao salvar preferência no banco de dados' });
   }
 });
 

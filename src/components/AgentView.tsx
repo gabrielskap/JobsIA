@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, ReactNode } from 'react';
 import {
   Bot, User, Send, CheckCircle2, Copy, FileDown,
-  Settings2, X, Save, MessageSquare, BookOpen, ChevronDown, ChevronUp, RefreshCw, History
+  Settings2, X, Save, MessageSquare, BookOpen, ChevronDown, ChevronUp, RefreshCw, History, Cpu
 } from 'lucide-react';
 import { downloadChecklistPDF } from '../utils/pdfGenerator';
 import { api } from '../lib/api';
@@ -278,6 +278,10 @@ export function AgentView() {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [conversationsList, setConversationsList] = useState<any[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    return localStorage.getItem('lia_selected_model') || 'claude-sonnet';
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -340,9 +344,26 @@ export function AgentView() {
       }
       if (savedPrompt) setSystemPrompt(savedPrompt);
       fetchConversations();
+
+      // Buscar modelos disponíveis da LIA API
+      try {
+        const response = await api.get<{ data: { id: string; name?: string }[] }>('/ai/models');
+        if (response && response.data) {
+          setModels(response.data.map((m: any) => ({ id: m.id, name: m.name || m.id })));
+        }
+      } catch (err) {
+        console.error('Erro ao buscar modelos:', err);
+      }
     }
     init();
   }, []);
+
+  useEffect(() => {
+    if (profile?.selected_model) {
+      setSelectedModel(profile.selected_model);
+      localStorage.setItem('lia_selected_model', profile.selected_model);
+    }
+  }, [profile]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -505,6 +526,7 @@ export function AgentView() {
         messages,
         tools: [GENERATE_CHECKLIST_TOOL],
         conversation_id: currentConversationId || undefined,
+        model: selectedModel || undefined,
       });
 
       if (response.conversation_id) {
@@ -558,6 +580,7 @@ export function AgentView() {
             const followUp = await api.post<LIAResponse>('/ai/chat', {
               messages: updatedHistory,
               conversation_id: response.conversation_id || currentConversationId || undefined,
+              model: selectedModel || undefined,
             });
 
             const followUpText = followUp.choices[0].message.content;
@@ -633,9 +656,43 @@ export function AgentView() {
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
-            {/* ... Resto permanece idêntico ... */}
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Cpu className="w-3 h-3 text-blue-600" /> Modelo de Linguagem (LIA)
+                </h4>
+                <p className="text-xs text-slate-500 bg-blue-50 p-3 rounded-lg border border-blue-100 italic">
+                  Selecione o modelo a ser utilizado para as respostas do agente.
+                </p>
+                <div className="relative">
+                  <select
+                    value={selectedModel}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setSelectedModel(val);
+                      localStorage.setItem('lia_selected_model', val);
+                      api.post('/ai/preferences', { selectedModel: val }).catch(err => {
+                        console.error('Erro ao salvar preferência no banco:', err);
+                      });
+                    }}
+                    className="w-full p-3 text-sm text-slate-700 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all appearance-none pr-10 font-medium"
+                  >
+                    {models.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                    {models.length === 0 && (
+                      <option value={selectedModel}>{selectedModel}</option>
+                    )}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-500">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                   <MessageSquare className="w-3 h-3" /> Instruções de IA (Prompt)

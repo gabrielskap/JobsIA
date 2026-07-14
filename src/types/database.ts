@@ -8,6 +8,7 @@ export interface Profile {
   role?: string;
   matricula?: string;
   is_active?: boolean;
+  selected_model?: string;
   created_at: string;
 }
 
