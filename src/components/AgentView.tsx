@@ -12,7 +12,7 @@ import { buildCommand } from '../utils/commandBuilder';
 import type { JobTypeWithParameters } from '../types/database';
 import { useAuth } from '../contexts/AuthContext';
 
-const BASE_SYSTEM_PROMPT = `Você é o Agente de IA de Jobs da DATAPREV (DIOT), especializado em automação de Jobs.
+const BASE_SYSTEM_PROMPT = `Você é o Hudson, Agente de IA de Jobs da DATAPREV (DIOT), especializado em automação de Jobs.
 Sua missão: ajudar o usuário a configurar workloads através de conversa natural e inteligente.
 
 ## COMPORTAMENTO
@@ -265,7 +265,7 @@ export function AgentView() {
     {
       id: '1',
       role: 'agent',
-      text: 'Olá! Sou o Agente de IA de Jobs da DATAPREV.\n\nComo Posso te ajudar?',
+      text: 'Olá! Sou o Hudson, Agente de IA de Jobs da DATAPREV.\n\nComo posso te ajudar?',
     },
   ]);
   const [inputValue, setInputValue] = useState('');
@@ -821,6 +821,10 @@ export function AgentView() {
           </div>
           <div>
             <h2 className="font-semibold text-slate-800">DATAPREV</h2>
+            <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+              <Cpu className="w-3 h-3" />
+              {models.find(m => m.id === selectedModel)?.name || selectedModel}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">

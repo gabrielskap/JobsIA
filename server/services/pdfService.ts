@@ -4,7 +4,7 @@ import path from 'path';
 
 let logoBase64 = '';
 try {
-  const logoPath = path.join(process.cwd(), 'public/dataprev-logo.png');
+  const logoPath = path.join(process.cwd(), 'public/Logo_dataprev_Preferencial-01.png');
   if (fs.existsSync(logoPath)) {
     logoBase64 = fs.readFileSync(logoPath).toString('base64');
   }
