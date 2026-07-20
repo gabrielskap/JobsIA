@@ -77,13 +77,13 @@ export const pdfService = {
     const pageH = doc.internal.pageSize.getHeight(); // 297
     const margin = 15;
     const contentW = pageW - margin * 2; // 180
-    let y = 30; // Starting Y coordinate below header
+    let y = 40; // Starting Y coordinate below header
 
     // Helper to ensure layout doesn't overflow page bounds
     const checkSpace = (heightNeeded: number) => {
       if (y + heightNeeded > pageH - 22) {
         doc.addPage();
-        y = 30; // Reset Y on new page
+        y = 40; // Reset Y on new page
       }
     };
 
@@ -313,7 +313,7 @@ export const pdfService = {
 
       // Header Layout - Exibe a Logo do Sistema ou o texto fallback
       if (logoBase64) {
-        doc.addImage(`data:image/png;base64,${logoBase64}`, 'PNG', margin, 4, 48, 16);
+        doc.addImage(`data:image/png;base64,${logoBase64}`, 'PNG', margin, 4, 48, 24);
       } else {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);
@@ -332,20 +332,12 @@ export const pdfService = {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8);
         doc.setTextColor(30, 41, 59);
-        doc.text(`RQS/RDM: ${payload.rqs_rdm}`, pageW - margin - 45, 12);
-
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Template: v${TEMPLATE_VERSION}`, pageW - margin - 45, 16);
-      } else {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(30, 41, 59);
-        doc.text(`Template: v${TEMPLATE_VERSION}`, pageW - margin - 45, 16);
+        doc.text(`RQS/RDM: ${payload.rqs_rdm}`, pageW - margin - 45, 20);
       }
 
       doc.setDrawColor(226, 232, 240);
       doc.setLineWidth(0.4);
-      doc.line(margin, 20, pageW - margin, 20);
+      doc.line(margin, 32, pageW - margin, 32);
 
       // Footer Layout
       doc.line(margin, pageH - 15, pageW - margin, pageH - 15);
