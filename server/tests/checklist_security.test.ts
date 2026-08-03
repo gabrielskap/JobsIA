@@ -11,9 +11,9 @@ let testUserToken: string;
 const testJobTypeId = 888;
 
 test.before(async () => {
-  // Limpar tabelas de testes
-  await pool.query('DELETE FROM "JobsIA_validation_runs"');
-  await pool.query('DELETE FROM "JobsIA_checklists"');
+  // Limpar tabelas de testes para o usuário de teste
+  await pool.query('DELETE FROM "JobsIA_validation_runs" WHERE checklist_id IN (SELECT id FROM "JobsIA_checklists" WHERE user_name = \'Sec Tester\')');
+  await pool.query('DELETE FROM "JobsIA_checklists" WHERE user_name = \'Sec Tester\'');
   await pool.query('DELETE FROM "JobsIA_parameters" WHERE job_type_id = $1', [testJobTypeId]);
   await pool.query('DELETE FROM "JobsIA_types" WHERE id = $1', [testJobTypeId]);
   await pool.query('DELETE FROM users WHERE email = $1', ['sec_tester@dataprev.gov.br']);

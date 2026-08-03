@@ -18,12 +18,7 @@ let checklistId: string;
 let conversationId: string;
 
 test.before(async () => {
-  // Limpar tabelas associadas a interações e feedbacks
-  await pool.query('DELETE FROM "JobsIA_user_feedback"');
-  await pool.query('DELETE FROM "JobsIA_interaction_classifications"');
-  await pool.query('DELETE FROM "JobsIA_checklists"');
-  await pool.query('DELETE FROM "JobsIA_messages"');
-  await pool.query('DELETE FROM "JobsIA_conversations"');
+  // Limpar usuários de teste e seus dados associados
   await pool.query('DELETE FROM users WHERE email IN ($1, $2, $3)', [
     'admin_test@dataprev.gov.br',
     'sol_test@dataprev.gov.br',

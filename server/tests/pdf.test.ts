@@ -14,8 +14,8 @@ const testJobTypeId = 777;
 
 test.before(async () => {
   // Limpar tabelas
-  await pool.query('DELETE FROM "JobsIA_validation_runs"');
-  await pool.query('DELETE FROM "JobsIA_checklists"');
+  await pool.query('DELETE FROM "JobsIA_validation_runs" WHERE checklist_id IN (SELECT id FROM "JobsIA_checklists" WHERE user_name = \'PDF Tester\')');
+  await pool.query('DELETE FROM "JobsIA_checklists" WHERE user_name = \'PDF Tester\'');
   await pool.query('DELETE FROM "JobsIA_parameters" WHERE job_type_id = $1', [testJobTypeId]);
   await pool.query('DELETE FROM "JobsIA_types" WHERE id = $1', [testJobTypeId]);
   await pool.query('DELETE FROM users WHERE email = $1', ['pdf_tester@dataprev.gov.br']);
