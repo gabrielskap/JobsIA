@@ -9,6 +9,8 @@ if (!process.env.JWT_SECRET) {
 import authRouter from './routes/auth';
 import jobsRouter from './routes/jobs';
 import checklistsRouter from './routes/checklists';
+import applicationChecklistsRouter from './routes/applicationChecklists';
+import checklistCatalogRouter from './routes/checklistCatalog';
 import normsRouter from './routes/norms';
 import dictionaryRouter from './routes/dictionary';
 import systemPromptsRouter from './routes/systemPrompts';
@@ -24,7 +26,9 @@ app.use(express.json());
 
 app.use('/api/auth', authRouter);
 app.use('/api/jobs', jobsRouter);
+app.use('/api/checklists/application', applicationChecklistsRouter);
 app.use('/api/checklists', checklistsRouter);
+app.use('/api/checklist-catalog', checklistCatalogRouter);
 app.use('/api/norms', normsRouter);
 app.use('/api/dictionary', dictionaryRouter);
 app.use('/api/system-prompts', systemPromptsRouter);

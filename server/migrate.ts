@@ -2,9 +2,19 @@ import 'dotenv/config';
 import pg from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
+import {
+  assertMigrationDoesNotThreatenUsers,
+  assertUsersPreserved,
+  lockAndCaptureUsers,
+  normalizeMigrationTransaction,
+} from './migrationSafety';
 
 const MIGRATIONS_DIR = path.join(process.cwd(), 'migrations');
 const connectionString = process.env.DATABASE_URL;
+// Existing untracked databases represent the legacy schema only. Keep later
+// migrations executable instead of marking their database changes as done.
+const LEGACY_BASELINE_THROUGH = '0020_add_capador_parameters.sql';
+const APPLICATION_SCHEMA_BASELINE_THROUGH = '0021_structured_application_checklists.sql';
 
 async function run() {
   if (!connectionString) {
@@ -35,6 +45,54 @@ async function run() {
       );
     `);
     const isAlreadyStructured = tableCheck.rows[0].exists;
+    const applicationSchemaCheck = await client.query(`
+      SELECT
+        EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'JobsIA_checklist_catalog_items'
+        ) AS has_catalog,
+        EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'JobsIA_application_validation_rules'
+        ) AS has_application_rules,
+        EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'JobsIA_job_checklist_requirements'
+        ) AS has_requirements,
+        EXISTS (
+          SELECT FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'JobsIA_checklists'
+            AND column_name = 'schema_version'
+        ) AS has_schema_version,
+        EXISTS (
+          SELECT FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'JobsIA_parameters'
+            AND column_name = 'collection_scope'
+        ) AS has_collection_scope,
+        EXISTS (
+          SELECT FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'JobsIA_parameters'
+            AND column_name = 'document_only'
+        ) AS has_document_only,
+        EXISTS (
+          SELECT FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'JobsIA_parameters'
+            AND column_name = 'collect_in_conversation'
+        ) AS has_collection_flag
+    `);
+    const isAlreadyApplicationV2 = Boolean(
+      applicationSchemaCheck.rows[0].has_catalog
+      && applicationSchemaCheck.rows[0].has_application_rules
+      && applicationSchemaCheck.rows[0].has_requirements
+      && applicationSchemaCheck.rows[0].has_schema_version
+      && applicationSchemaCheck.rows[0].has_collection_scope
+      && applicationSchemaCheck.rows[0].has_document_only
+      && applicationSchemaCheck.rows[0].has_collection_flag
+    );
 
     // Listar todos os arquivos da pasta migrations
     if (!fs.existsSync(MIGRATIONS_DIR)) {
@@ -53,11 +111,23 @@ async function run() {
     const { rows } = await client.query('SELECT name FROM schema_migrations');
     const appliedMigrations = new Set(rows.map(r => r.name));
 
-    // Se o banco ja possui a estrutura final, mas nao registrou nenhuma migracao na tabela de controle,
-    // nos marcamos todas as migracoes atuais como "ja aplicadas" (baselining automatico).
-    if (isAlreadyStructured && appliedMigrations.size === 0) {
-      console.log('ℹ️ Detectado banco de dados ja estruturado. Executando baselining automatico de migracoes...');
-      for (const file of migrationFiles) {
+    // Alguns ambientes legados receberam o schema v2 manualmente, mas mantêm
+    // uma tabela schema_migrations parcial. Detectar a estrutura efetiva evita
+    // reexecutar migrações históricas que podem alterar dados.
+    if (isAlreadyApplicationV2) {
+      console.log('ℹ️ Detectado schema v2 já existente. Sincronizando o histórico de migrations sem reexecutá-las...');
+      for (const file of migrationFiles.filter(file => file <= APPLICATION_SCHEMA_BASELINE_THROUGH)) {
+        if (appliedMigrations.has(file)) continue;
+        await client.query('INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING', [file]);
+        appliedMigrations.add(file);
+        console.log(`  -> Baselined (schema já presente): ${file}`);
+      }
+    // Bancos legados sem controle de migrations representam apenas o schema
+    // até 0020. Evoluções posteriores precisam executar de fato.
+    } else if (isAlreadyStructured && appliedMigrations.size === 0) {
+      const legacyFiles = migrationFiles.filter(file => file <= LEGACY_BASELINE_THROUGH);
+      console.log(`ℹ️ Detectado banco de dados legado. Executando baselining automatico ate ${LEGACY_BASELINE_THROUGH}...`);
+      for (const file of legacyFiles) {
         await client.query('INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING', [file]);
         appliedMigrations.add(file);
         console.log(`  -> Baselined (marcada como aplicada): ${file}`);
@@ -74,11 +144,17 @@ async function run() {
       console.log(`🚀 Aplicando migração: ${file}`);
       const filePath = path.join(MIGRATIONS_DIR, file);
       const sql = fs.readFileSync(filePath, 'utf8');
+      assertMigrationDoesNotThreatenUsers(file, sql);
+      const migrationSql = normalizeMigrationTransaction(sql);
 
-      // Executar a migração dentro de uma transação
+      // The runner owns the transaction boundary. Historic migration files
+      // are normalized so SQL, the users invariant, and migration history are
+      // committed or rolled back as one unit.
       await client.query('BEGIN');
       try {
-        await client.query(sql);
+        const usersBefore = await lockAndCaptureUsers(client);
+        await client.query(migrationSql);
+        await assertUsersPreserved(client, usersBefore);
         await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file]);
         await client.query('COMMIT');
         console.log(`✅ Migração ${file} aplicada com sucesso.`);

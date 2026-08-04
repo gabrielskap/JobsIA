@@ -3,7 +3,7 @@ import { pool } from '../db';
 import { requireAuth, type AuthRequest } from '../middleware/auth';
 import { validationEngine } from '../services/validationEngine';
 import { validateChecklistProposal } from '../schemas/checklistSchema';
-import { pdfService } from '../services/pdfService';
+import { pdfService, type PDFDataPayload } from '../services/pdfService';
 
 const router = Router();
 router.use(requireAuth);
@@ -158,7 +158,7 @@ router.post('/', async (req: AuthRequest, res) => {
       // 5. Geração do Comando no Backend
       const parts: string[] = [job.script];
       for (const param of paramRows) {
-        if (param.parameter_type === 'internal' || param.parameter_type === 'generated') continue;
+        if (param.document_only || param.parameter_type === 'internal' || param.parameter_type === 'generated') continue;
         const value = collected_data[param.name];
         if (value === undefined || value === null || String(value).trim() === '') continue;
 
@@ -392,7 +392,7 @@ router.get('/:id/pdf', async (req: AuthRequest, res) => {
       servidoresVal = `${servOrigem || ''} -> ${servDest || ''}`;
     }
 
-    const payload = {
+    const payload: PDFDataPayload = {
       id: checklist.id,
       rqs_rdm: getField(['rqs_rdm', 'rqs', 'rdm', 'RQS / RDM Associada']) || 'N/A',
       status: checklist.status,
@@ -442,6 +442,61 @@ router.get('/:id/pdf', async (req: AuthRequest, res) => {
       applied_rules_snapshot: checklist.applied_rules_snapshot,
       applied_rules_hash: checklist.applied_rules_hash,
     };
+
+    // Checklists v2 representam uma Application e sua lista ordenada de jobs.
+    // O PDF recebe a estrutura completa para não perder parâmetros novos por
+    // depender de aliases fixos do contrato legado.
+    if (Number(collected.schema_version) === 2 && Array.isArray(collected.jobs)) {
+      const application = (collected.application && typeof collected.application === 'object')
+        ? collected.application as Record<string, any>
+        : {};
+      const schedule = (application.schedule && typeof application.schedule === 'object')
+        ? application.schedule as Record<string, any>
+        : undefined;
+
+      payload.application = application.name || payload.application || 'N/A';
+      payload.quantidade_jobs = collected.jobs.length;
+      payload.responsibilities = {
+        'Responsável Operacional': application.responsible_name || 'N/A',
+        Solicitante: application.requester_name || checklist.user_name || 'N/A',
+        Área: application.area || 'N/A',
+        Contato: application.contact || 'N/A',
+      };
+      payload.scheduling = schedule || {};
+      payload.application_metadata = {
+        'Modo de Servidor': application.server_mode || 'N/A',
+        'Servidor Compartilhado': application.shared_server || 'N/A',
+        ...(application.metadata && typeof application.metadata === 'object' ? application.metadata : {}),
+      };
+      payload.jobs = collected.jobs.map((job: any) => {
+        const jobSchedule = job.schedule && typeof job.schedule === 'object'
+          ? job.schedule
+          : schedule || {};
+        const capador = job.capador && typeof job.capador === 'object'
+          ? {
+              Aplicável: job.capador.applicable ? 'Sim' : 'Não',
+              ...(job.capador.parameters && typeof job.capador.parameters === 'object' ? job.capador.parameters : {}),
+              ...(job.capador.notes ? { Observações: job.capador.notes } : {}),
+            }
+          : undefined;
+
+        return {
+          sequence: job.sequence,
+          job_type_id: job.job_type_id,
+          job_type_name: job.job_type_name || job.name,
+          generic: job.generic,
+          bridge: job.bridge,
+          server: job.server || application.shared_server,
+          command: job.command,
+          parameters: job.parameters || {},
+          capador,
+          scheduling: jobSchedule,
+        };
+      });
+      payload.command = Array.isArray(collected.commands)
+        ? collected.commands.join('\n')
+        : payload.command;
+    }
 
     // 5. Gerar o buffer do PDF
     const pdfBuffer = pdfService.generateChecklistPDF(payload);

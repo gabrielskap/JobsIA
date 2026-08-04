@@ -1,9 +1,29 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { requireAuth, requireRole, logAudit, type AuthRequest } from '../middleware/auth';
+import { aiCache } from './ai';
 
 const router = Router();
 router.use(requireAuth);
+
+const CAPADOR_PARAMETER_NAMES = new Set([
+  'diretorio_origem',
+  'diretorio_destino',
+  'capacidade_armazenamento',
+  'permissoes_usuario',
+]);
+
+function getCollectionMetadata(parameter: any) {
+  const parameterType = String(parameter.parameter_type || 'flag');
+  const isCapador = CAPADOR_PARAMETER_NAMES.has(String(parameter.name || '').trim().toLowerCase());
+  return {
+    collectionScope: parameter.collection_scope || (isCapador ? 'CAPADOR' : 'JOB'),
+    collectInConversation: parameter.collect_in_conversation
+      ?? (parameterType !== 'generated'),
+    documentOnly: parameter.document_only
+      ?? (isCapador || parameterType === 'internal'),
+  };
+}
 
 router.get('/', async (_req, res) => {
   try {
@@ -38,18 +58,21 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
     let createdParams: unknown[] = [];
     if (parameters?.length > 0) {
       for (const p of parameters) {
+        const metadata = getCollectionMetadata(p);
         const { rows: pr } = await client.query(
           `INSERT INTO "JobsIA_parameters"
-            (job_type_id, flag, name, required, description, parameter_type, order_index, data_type, default_value, example_value, validation_regex, active)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+            (job_type_id, flag, name, required, description, parameter_type, order_index, data_type, default_value, example_value, validation_regex, active, collection_scope, collect_in_conversation, document_only)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
           [createdJob.id, p.flag ?? null, p.name, p.required, p.description,
            p.parameter_type, p.order_index, p.data_type, p.default_value ?? null,
-           p.example_value ?? null, p.validation_regex ?? null, p.active ?? true]
+           p.example_value ?? null, p.validation_regex ?? null, p.active ?? true,
+           metadata.collectionScope, metadata.collectInConversation, metadata.documentOnly]
         );
         createdParams.push(pr[0]);
       }
     }
     await client.query('COMMIT');
+    aiCache.clear();
     await logAudit(req.userId, 'CREATE_JOB', { id: createdJob.id, name: createdJob.name }, req.ip);
     res.status(201).json({ ...createdJob, parameters: createdParams });
   } catch (err) {
@@ -82,18 +105,21 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
     let updatedParams: unknown[] = [];
     if (parameters?.length > 0) {
       for (const p of parameters) {
+        const metadata = getCollectionMetadata(p);
         const { rows: pr } = await client.query(
           `INSERT INTO "JobsIA_parameters"
-            (job_type_id, flag, name, required, description, parameter_type, order_index, data_type, default_value, example_value, validation_regex, active)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+            (job_type_id, flag, name, required, description, parameter_type, order_index, data_type, default_value, example_value, validation_regex, active, collection_scope, collect_in_conversation, document_only)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
           [updatedJob.id, p.flag ?? null, p.name, p.required, p.description,
            p.parameter_type, p.order_index, p.data_type, p.default_value ?? null,
-           p.example_value ?? null, p.validation_regex ?? null, p.active ?? true]
+           p.example_value ?? null, p.validation_regex ?? null, p.active ?? true,
+           metadata.collectionScope, metadata.collectInConversation, metadata.documentOnly]
         );
         updatedParams.push(pr[0]);
       }
     }
     await client.query('COMMIT');
+    aiCache.clear();
     await logAudit(req.userId, 'UPDATE_JOB', { id: updatedJob.id, name: updatedJob.name }, req.ip);
     res.json({ ...updatedJob, parameters: updatedParams });
   } catch (err) {
@@ -110,6 +136,7 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     await pool.query('DELETE FROM "JobsIA_parameters" WHERE job_type_id = $1', [id]);
     await pool.query('DELETE FROM "JobsIA_types" WHERE id = $1', [id]);
+    aiCache.clear();
     await logAudit(req.userId, 'DELETE_JOB', { id }, req.ip);
     res.status(204).send();
   } catch (err) {

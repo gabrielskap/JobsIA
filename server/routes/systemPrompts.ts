@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db';
 import { requireAuth, requireRole, logAudit, type AuthRequest } from '../middleware/auth';
+import { aiCache } from './ai';
 
 const router = Router();
 router.use(requireAuth);
@@ -31,6 +32,9 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
       [content]
     );
     await client.query('COMMIT');
+    // O prompt administrativo é uma sobreposição do contexto consolidado.
+    // Limpar após o commit evita que a próxima conversa reutilize a versão anterior.
+    aiCache.clear();
     const briefContent = content && content.length > 100 ? content.slice(0, 100) + '...' : content;
     await logAudit(req.userId, 'UPDATE_SYSTEM_PROMPT', { content: briefContent }, req.ip);
     res.status(201).json({ message: 'Prompt salvo' });

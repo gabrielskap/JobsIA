@@ -51,7 +51,10 @@ CREATE TABLE IF NOT EXISTS "JobsIA_parameters" (
   default_value     TEXT,
   example_value     TEXT,
   validation_regex  TEXT,
-  active            BOOLEAN NOT NULL DEFAULT true
+  active            BOOLEAN NOT NULL DEFAULT true,
+  collection_scope  TEXT NOT NULL DEFAULT 'JOB' CONSTRAINT chk_parameter_collection_scope CHECK (collection_scope IN ('APPLICATION', 'JOB', 'CAPADOR')),
+  collect_in_conversation BOOLEAN NOT NULL DEFAULT true,
+  document_only     BOOLEAN NOT NULL DEFAULT false
 );
 
 -- 5. Tabela: JobsIA_conversations (Conversas do Chat)
@@ -91,7 +94,14 @@ CREATE TABLE IF NOT EXISTS "JobsIA_checklists" (
   warnings        JSONB DEFAULT '[]'::jsonb,
   command         TEXT,
   applied_rules_snapshot JSONB DEFAULT NULL,
-  applied_rules_hash     TEXT DEFAULT NULL
+  applied_rules_hash     TEXT DEFAULT NULL,
+  schema_version SMALLINT NOT NULL DEFAULT 1 CONSTRAINT chk_checklist_schema_version CHECK (schema_version IN (1, 2)),
+  workflow_status TEXT NOT NULL DEFAULT 'FINAL' CONSTRAINT chk_checklist_workflow_status CHECK (workflow_status IN ('RASCUNHO', 'FINAL')),
+  application_name TEXT,
+  responsible_name TEXT,
+  application_data JSONB,
+  job_items JSONB,
+  schedule_data JSONB
 );
 
 -- 8. Tabela: JobsIA_dictionary_terms (Dicionário de Termos)
@@ -196,6 +206,44 @@ CREATE TABLE IF NOT EXISTS "JobsIA_refresh_tokens" (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Catalogo extensivel. Os nomes oficiais de genericos e pontes sao publicados
+-- pela DIOT; nenhum nome e inferido pelo schema.
+CREATE TABLE IF NOT EXISTS "JobsIA_checklist_catalog_items" (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind             TEXT NOT NULL CONSTRAINT chk_checklist_catalog_kind CHECK (kind IN ('GENERIC', 'BRIDGE')),
+  code             TEXT NOT NULL,
+  name             TEXT NOT NULL,
+  description      TEXT,
+  official_version TEXT,
+  metadata         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  active           BOOLEAN NOT NULL DEFAULT true,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "JobsIA_job_checklist_requirements" (
+  job_type_id       INTEGER PRIMARY KEY REFERENCES "JobsIA_types"(id) ON UPDATE CASCADE ON DELETE CASCADE,
+  requires_server   BOOLEAN NOT NULL DEFAULT false,
+  requires_generic  BOOLEAN NOT NULL DEFAULT true,
+  requires_bridge   BOOLEAN NOT NULL DEFAULT true,
+  requires_capador  BOOLEAN NOT NULL DEFAULT false,
+  metadata          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "JobsIA_application_validation_rules" (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code                TEXT NOT NULL UNIQUE,
+  description         TEXT NOT NULL DEFAULT '',
+  validation_regex    TEXT,
+  severity            TEXT NOT NULL DEFAULT 'BLOQUEANTE' CONSTRAINT chk_application_rule_severity CHECK (severity IN ('BLOQUEANTE', 'AVISO')),
+  message             TEXT NOT NULL DEFAULT 'Nome de Application fora do padrao corporativo.',
+  suggestion_template TEXT,
+  active              BOOLEAN NOT NULL DEFAULT true,
+  status              TEXT NOT NULL DEFAULT 'RASCUNHO' CONSTRAINT chk_application_rule_status CHECK (status IN ('RASCUNHO', 'APROVADO', 'PUBLICADO')),
+  version             INTEGER NOT NULL DEFAULT 1,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- =============================================================================
 -- CRIAÇÃO DE ÍNDICES ADICIONAIS PARA DESEMPENHO E CHAVES ESTRANGEIRAS
 -- =============================================================================
@@ -217,6 +265,11 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON "JobsIA_audit_logs"(user_id
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON "JobsIA_audit_logs"(created_at);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON "JobsIA_refresh_tokens"(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON "JobsIA_refresh_tokens"(token);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_checklist_catalog_kind_code ON "JobsIA_checklist_catalog_items"(kind, code);
+CREATE INDEX IF NOT EXISTS idx_checklist_catalog_active_kind ON "JobsIA_checklist_catalog_items"(kind, active);
+CREATE INDEX IF NOT EXISTS idx_application_validation_rules_active ON "JobsIA_application_validation_rules"(active, status);
+CREATE INDEX IF NOT EXISTS idx_checklists_schema_workflow ON "JobsIA_checklists"(schema_version, workflow_status);
+CREATE INDEX IF NOT EXISTS idx_checklists_application_name ON "JobsIA_checklists"(application_name);
 
 -- =============================================================================
 -- CRIAÇÃO DAS VIEWS DE NEGÓCIO CORRIGIDAS (SEM DEPS DE ENUMS LEGADOS)

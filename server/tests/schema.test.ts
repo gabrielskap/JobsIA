@@ -5,24 +5,27 @@ import * as path from 'path';
 
 const MIGRATIONS_DIR = path.join(process.cwd(), 'migrations');
 
-// Obter a URL do banco
-const connectionString = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
-
-// Flag de força (permite rodar na base de desenvolvimento)
-const forceDev = process.argv.includes('--force-dev');
+// This test executes rollback_schema.sql and must use a dedicated test database.
+const connectionString = process.env.DATABASE_URL_TEST;
 
 async function main() {
-  if (!connectionString) {
-    console.error('❌ Erro: DATABASE_URL ou DATABASE_URL_TEST não configurada no ambiente.');
+  if (process.env.NODE_ENV?.toLowerCase() === 'production') {
+    console.error('test:schema é bloqueado em produção porque executa rollback_schema.sql.');
     process.exit(1);
   }
 
-  // Proteção defensiva para evitar limpeza acidental da base de produção/dev
-  if (!process.env.DATABASE_URL_TEST && !forceDev) {
-    console.error('⚠️  Cuidado: DATABASE_URL_TEST não está definida.');
-    console.error('Executar este teste irá APAGAR todas as tabelas da base de desenvolvimento/produção.');
-    console.error('Para prosseguir na base atual, use a flag: npm run test:schema -- --force-dev');
-    console.error('Ou defina a variável DATABASE_URL_TEST no seu arquivo .env');
+  if (!connectionString) {
+    console.error('DATABASE_URL_TEST is required for test:schema. DATABASE_URL is never used as a fallback.');
+    process.exit(1);
+  }
+
+  if (process.env.JOBSIA_ALLOW_DESTRUCTIVE_SCHEMA_TEST !== '1') {
+    console.error('Set JOBSIA_ALLOW_DESTRUCTIVE_SCHEMA_TEST=1 to run this destructive test on a dedicated test database.');
+    process.exit(1);
+  }
+
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL === connectionString) {
+    console.error('DATABASE_URL_TEST must not be the same connection string as DATABASE_URL.');
     process.exit(1);
   }
 
@@ -32,6 +35,9 @@ async function main() {
   try {
     await client.connect();
     const dbName = (client as any).connectionParameters?.database || 'desconhecido';
+    if (!/(^|[_-])test([_-]|$)/i.test(dbName)) {
+      throw new Error(`test:schema only accepts a database whose name contains a test marker; received "${dbName}".`);
+    }
     console.log(`✅ Conectado à base de dados: "${dbName}"`);
 
     // =========================================================================

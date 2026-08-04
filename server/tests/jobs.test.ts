@@ -5,6 +5,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { app } from '../app';
 import { pool } from '../db';
+import { aiCache } from '../routes/ai';
 
 let adminToken: string;
 let solicitanteToken: string;
@@ -72,6 +73,8 @@ test('POST /api/jobs - Deve impedir criação por SOLICITANTE (RBAC)', async () 
 });
 
 test('POST /api/jobs - Deve criar job e parâmetros com ADMIN', async () => {
+  aiCache.set('consolidated_prompt', { prompt: 'catálogo obsoleto' });
+
   const res = await request(app)
     .post('/api/jobs')
     .set('Authorization', `Bearer ${adminToken}`)
@@ -98,9 +101,12 @@ test('POST /api/jobs - Deve criar job e parâmetros com ADMIN', async () => {
   assert.strictEqual(res.body.id, TEST_JOB_ID);
   assert.strictEqual(res.body.parameters.length, 1);
   assert.strictEqual(res.body.parameters[0].name, 'param1');
+  assert.strictEqual(aiCache.get('consolidated_prompt'), null, 'A criação do job deve invalidar o catálogo em cache');
 });
 
 test('PUT /api/jobs/:id - Deve atualizar job e seus parâmetros como ADMIN', async () => {
+  aiCache.set('consolidated_prompt', { prompt: 'catálogo obsoleto' });
+
   const res = await request(app)
     .put(`/api/jobs/${TEST_JOB_ID}`)
     .set('Authorization', `Bearer ${adminToken}`)
@@ -125,6 +131,7 @@ test('PUT /api/jobs/:id - Deve atualizar job e seus parâmetros como ADMIN', asy
   assert.strictEqual(res.status, 200);
   assert.strictEqual(res.body.name, 'Job Teste Atualizado');
   assert.strictEqual(res.body.parameters[0].name, 'param_atualizado');
+  assert.strictEqual(aiCache.get('consolidated_prompt'), null, 'A atualização do job deve invalidar o catálogo em cache');
 });
 
 test('PUT /api/jobs/:id - Retorna 404 para job inexistente', async () => {
@@ -149,11 +156,14 @@ test('POST /api/jobs/seed - Deve verificar seed de jobs como ADMIN', async () =>
 });
 
 test('DELETE /api/jobs/:id - Deve remover job e parâmetros com ADMIN', async () => {
+  aiCache.set('consolidated_prompt', { prompt: 'catálogo obsoleto' });
+
   const res = await request(app)
     .delete(`/api/jobs/${TEST_JOB_ID}`)
     .set('Authorization', `Bearer ${adminToken}`);
 
   assert.strictEqual(res.status, 204);
+  assert.strictEqual(aiCache.get('consolidated_prompt'), null, 'A remoção do job deve invalidar o catálogo em cache');
 
   // Verificar se removeu do banco
   const { rows } = await pool.query('SELECT * FROM "JobsIA_types" WHERE id = $1', [TEST_JOB_ID]);
