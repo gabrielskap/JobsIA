@@ -48,12 +48,18 @@ export interface PDFDataPayload {
   simultaneidade?: string;
   regras_concorrencia?: string;
 
-  // Transfer specifications
+  // Transfer specifications & CAPADOR Storage Parameters
   origem_destino?: string;
   servidores?: string;
   operacao?: string;
   codificacao?: string;
   temporalidade?: string;
+  servidor_origem?: string;
+  servidor_destino?: string;
+  diretorio_origem?: string;
+  diretorio_destino?: string;
+  capacidade_armazenamento?: string;
+  permissoes_usuario?: string;
 
   // Validation results
   errors?: any[];
@@ -219,17 +225,22 @@ export const pdfService = {
       y += cmdBlockH + 6;
     }
 
-    // --- SECTION 5: ESPECIFICAÇÃO DE ARQUIVOS E TRANSFERÊNCIA ---
+    // --- SECTION 5: ARMAZENAMENTO NOS SERVIDORES (PARÂMETROS CAPADOR) E TRANSFERÊNCIA ---
     const fileFields = [
       { label: 'Sentido da Operação (GET/PUT)', value: payload.operacao || 'N/A' },
       { label: 'Servidores de Origem / Destino', value: payload.servidores || 'N/A' },
-      { label: 'Caminho Físico Origem/Destino', value: payload.origem_destino || 'N/A' },
+      { label: 'Servidor de Origem', value: payload.servidor_origem || 'N/A' },
+      { label: 'Servidor de Destino', value: payload.servidor_destino || 'N/A' },
+      { label: 'Diretório / Caminho Origem', value: payload.diretorio_origem || 'N/A' },
+      { label: 'Diretório / Caminho Destino', value: payload.diretorio_destino || payload.origem_destino || 'N/A' },
+      { label: 'Capacidade / Volume Estimado', value: payload.capacidade_armazenamento || 'N/A' },
+      { label: 'Permissões / Usuário Proprietário', value: payload.permissoes_usuario || 'N/A' },
       { label: 'Codificação de Caracteres', value: payload.codificacao || 'N/A' },
       { label: 'Temporalidade / Tempo de Retenção', value: payload.temporalidade || 'N/A' },
     ];
     const hasFiles = fileFields.some(f => f.value && f.value.trim().toUpperCase() !== 'N/A');
     if (hasFiles) {
-      drawSectionHeader('5. ESPECIFICAÇÃO DE ARQUIVOS E TRANSFERÊNCIA');
+      drawSectionHeader('5. ARMAZENAMENTO NOS SERVIDORES (PARÂMETROS CAPADOR) E TRANSFERÊNCIA');
       drawFieldsTable(fileFields);
     }
 
