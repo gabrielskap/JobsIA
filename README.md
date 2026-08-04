@@ -56,8 +56,10 @@ Certifique-se de configurar as seguintes variáveis obrigatórias:
 ### 3. Inicializar o Banco de Dados (Esquema e Migrações)
 A inicialização e validação das tabelas do banco de dados é feita de maneira robusta. Você pode preparar o banco aplicando o script de testes que limpa, executa migrações sequenciais e valida toda a integridade do esquema:
 ```bash
-# Executa o pipeline completo de testes e migrações no banco de desenvolvimento
-npm run test:schema -- --force-dev
+# This command is destructive. It requires an explicit confirmation, a
+# dedicated database whose name contains a test marker, and never falls back
+# to the application database.
+JOBSIA_ALLOW_DESTRUCTIVE_SCHEMA_TEST=1 DATABASE_URL_TEST=postgresql://test_user:test_password@localhost:5432/jobsia_test npm run test:schema
 ```
 
 ### 4. Executar a Aplicação
@@ -82,8 +84,38 @@ npm run dev
 O banco de dados do JobsIA é estruturado de forma incremental e idempotente. Os arquivos de migração residem no diretório `/migrations`.
 
 ### Opções de Inicialização:
-1. **Incremental (Histórico de Deltas)**: Execução em ordem numérica dos arquivos `0001_...` até `0016_...`. Cada arquivo adiciona as colunas, tabelas ou constraints de forma sequencial.
+1. **Incremental (Histórico de Deltas)**: Execução em ordem numérica dos arquivos `0001_...` até `0022_...` com `npm run build:server` seguido de `npm run migrate`. Cada arquivo adiciona as colunas, tabelas ou constraints de forma sequencial.
 2. **Baseline (Setup Direto)**: Aplicação do arquivo `migrations/baseline_schema.sql`, que consolida o esquema final mais recente em uma única execução para acelerar o provisionamento de novos ambientes de teste ou produção do zero.
+
+### Deploy seguro em producao
+
+O deploy normal executa somente migrations numeradas e interrompe a migration
+caso ela tente remover, recriar ou alterar a quantidade de registros de
+`public.users`. O volume PostgreSQL tambem deve continuar sendo o mesmo.
+Nao use `docker compose down -v`, `--volumes`, `docker volume prune`, nem
+`npm run test:schema` em producao.
+
+Com o banco ja em execucao, atualize apenas a API e o frontend; nao e preciso
+executar `docker compose down`:
+
+```bash
+# Registre a quantidade atual e gere um dump antes de qualquer alteracao.
+sudo docker compose exec -T db psql -U jobsia_user -d jobsia_prod -c 'SELECT COUNT(*) AS users_before FROM public.users;'
+sudo docker compose exec -T db pg_dump -U jobsia_user -d jobsia_prod -Fc > "jobsia-$(date +%Y%m%d-%H%M%S).dump"
+
+git pull --ff-only
+sudo docker compose build --no-cache api web
+sudo docker compose up -d --no-deps --force-recreate api
+sudo docker compose logs --tail=100 api
+
+# Execute somente depois de confirmar que as migrations terminaram com sucesso.
+sudo docker compose up -d --no-deps --force-recreate web
+sudo docker compose exec -T db psql -U jobsia_user -d jobsia_prod -c 'SELECT COUNT(*) AS users_after FROM public.users;'
+```
+
+Execute os comandos sempre no mesmo diretorio/projeto Compose que criou o
+volume atual. Mudar `COMPOSE_PROJECT_NAME`, usar `-p` diferente ou trocar o
+nome do volume pode fazer a aplicacao apontar para um banco novo e vazio.
 
 ### Ordem Crítica de Tabelas e Constraints:
 1. `users` (Tabela base de credenciais)
@@ -93,6 +125,18 @@ O banco de dados do JobsIA é estruturado de forma incremental e idempotente. Os
 5. `JobsIA_checklists` (Registros de checklists gerados com FK `user_id` e controle de integridade)
 6. `JobsIA_norm_rules` & `JobsIA_dictionary_terms` (Base de normas e dicionários integrados para composição dinâmica de prompts)
 7. `JobsIA_audit_logs` & `JobsIA_refresh_tokens` (Segurança, sessões ativas e trilha de auditoria para ações ADMIN)
+8. `JobsIA_checklist_catalog_items`, `JobsIA_job_checklist_requirements` e `JobsIA_application_validation_rules` (catálogo e regras versionadas do checklist por Application)
+
+### Checklist por Application (v2)
+
+O schema v2 registra uma Application com um ou mais jobs ordenados, ponte, genérico, estratégia de servidores, agendamento único/data-hora/recorrência e dados CAPADOR documentais. O endpoint de finalização é `POST /api/checklists/application`.
+
+Os genéricos, pontes e a regra corporativa de nomenclatura da Application não são presumidos pelo código. Após receber a fonte oficial DIOT, um ADMIN deve publicá-los por:
+
+- `POST /api/checklist-catalog/import` para itens `GENERIC` e `BRIDGE`;
+- `POST /api/checklist-catalog/application-rules/import` para regras de Application.
+
+Enquanto o catálogo oficial estiver vazio, a seleção é registrada com aviso para conferência; após a publicação, opções fora do catálogo são bloqueadas.
 
 ---
 

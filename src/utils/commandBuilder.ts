@@ -5,6 +5,7 @@ interface CommandParameter {
   flag: string | null;
   name: string;
   required: boolean;
+  document_only?: boolean;
 }
 
 /**
@@ -29,7 +30,7 @@ export function buildCommand(
   const parts: string[] = [script];
 
   for (const param of params) {
-    if (param.parameter_type === 'internal' || param.parameter_type === 'generated') continue;
+    if (param.document_only || param.parameter_type === 'internal' || param.parameter_type === 'generated') continue;
 
     const value = values[param.name];
     if (!value) continue;

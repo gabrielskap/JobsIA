@@ -1,5 +1,17 @@
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly details: unknown;
+
+  constructor(message: string, status: number, details: unknown) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.details = details;
+  }
+}
+
 export function getToken(): string | null {
   return localStorage.getItem('auth_token');
 }
@@ -69,7 +81,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 204) return undefined as T;
   const body = await res.json();
-  if (!res.ok) throw new Error(body.message || res.statusText);
+  if (!res.ok) {
+    const message = body && typeof body === 'object' && 'message' in body
+      ? String((body as { message?: unknown }).message || res.statusText)
+      : res.statusText;
+    throw new ApiRequestError(message, res.status, body);
+  }
   return body as T;
 }
 

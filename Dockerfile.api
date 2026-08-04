@@ -43,8 +43,10 @@ RUN npm ci --only=production
 # Copiar codigo compilado do estagio 1
 COPY --from=build /app/dist-server ./dist-server
 
-# Copiar a pasta de migrations (necessaria para o script de migracao automatica)
-COPY migrations/ ./migrations/
+# Production receives only incremental migrations. Baseline and rollback SQL
+# remain available for provisioning/tests in the repository but are excluded
+# from the runtime image to prevent accidental execution.
+COPY migrations/[0-9][0-9][0-9][0-9]_*.sql ./migrations/
 
 # Criar pasta para logs persistentes e ajustar permissoes para o usuario nao-root (node)
 RUN mkdir -p /app/logs && chown -R node:node /app

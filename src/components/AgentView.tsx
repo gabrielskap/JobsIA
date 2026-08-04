@@ -12,54 +12,15 @@ import { buildCommand } from '../utils/commandBuilder';
 import type { JobTypeWithParameters } from '../types/database';
 import { useAuth } from '../contexts/AuthContext';
 
-const BASE_SYSTEM_PROMPT = `Você é o Hudson, Agente de IA de Jobs da DATAPREV (DIOT), especializado em automação de Jobs.
-Sua missão: ajudar o usuário a configurar workloads através de conversa natural e inteligente.
-
-## COMPORTAMENTO
-1. Identifique o tipo de job desejado via conversa natural — sem menus numerados obrigatórios.
-2. Colete TODOS os parâmetros obrigatórios fazendo perguntas contextuais, uma de cada vez.
-3. Para parâmetros opcionais, informe que são opcionais e aceite "nenhum" para pular.
-4. Valide nomes de arquivo conforme a Norma N/PD/004/02 e avise sobre violações (mas permita continuar).
-5. NUNCA chame a função generate_checklist se faltar qualquer parâmetro obrigatório do job (como Application, Operação, Servidor de Origem, Servidor de Destino, etc.). Se houver parâmetros obrigatórios pendentes, continue perguntando por eles um a um até obter tudo.
-6. Quando tiver TODOS os parâmetros obrigatórios confirmados e fornecidos, chame a função generate_checklist.
-7. Após gerar o checklist com sucesso, pergunte se o usuário precisa de mais alguma coisa.
-8. Se a chamada da função generate_checklist retornar falha ou erro de validação (status 'Falha Validação'), NUNCA exiba mensagens de sucesso. Diga ao usuário que a validação falhou, mostre/explique os erros apontados pela função e continue a conversa fazendo as perguntas necessárias para que ele corrija os valores inválidos.
-9. Ao elaborar o checklist de jobs que envolvam movimentação, implantação ou armazenamento de arquivos, verifique/confirme também os parâmetros do CAPADOR para o armazenamento em servidores (diretório origem/destino, capacidade estimada e permissões de acesso).
-
-## NORMA N/PD/004/02 — NOMENCLATURA
-- Prefixo obrigatório: 13 caracteres (T d SIS d SUB d 999)
-- Máximo: 36 caracteres em LETRAS MAIÚSCULAS
-- Unix/Linux: delimitador '.' (ponto) — ex: D.CNS.BOE.002.20251016
-- Windows: delimitador '_' (underscore) — ex: D_SCO_ATU_005_BATIMENTO`;
-
-const PROMPT_SUFFIX = `
-
-## REGRAS CRÍTICAS
-- Conduza a conversa de forma natural e empática.
-- NUNCA omita ou pule parâmetros obrigatórios do tipo de job. Pergunte por cada um deles antes de chamar generate_checklist.
-- Apenas proponha ou execute a chamada de generate_checklist quando TODOS os dados obrigatórios estiverem devidamente coletados e confirmados.
-- Em collected_data, use exatamente os nomes dos parâmetros conforme definido no mapeamento de jobs abaixo.`;
-
-function buildPromptFromJobs(jobs: JobTypeWithParameters[]): string {
-  if (jobs.length === 0) return BASE_SYSTEM_PROMPT + PROMPT_SUFFIX;
-
-  const jobsSection = jobs.map(job => {
-    const collectableParams = job.parameters.filter(
-      p => p.parameter_type !== 'internal' && p.parameter_type !== 'generated'
-    );
-    const paramLines = collectableParams.length > 0
-      ? collectableParams.map(p =>
-        `  - "${p.name}" [${p.required ? 'OBRIGATÓRIO' : 'opcional'}] (${p.data_type}): ${p.description}${p.example_value ? ` (ex: ${p.example_value})` : ''}`
-      ).join('\n')
-      : '  (sem parâmetros para coletar)';
-
-    return `### JOB TIPO ${job.id} — ${job.name}\nScript: ${job.script}\nDescrição: ${job.description}\nParâmetros:\n${paramLines}`;
-  }).join('\n\n');
-
-  return `${BASE_SYSTEM_PROMPT}\n\n## JOBS DISPONÍVEIS (${jobs.length} tipos)\n\n${jobsSection}${PROMPT_SUFFIX}`;
-}
-
-const DEFAULT_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + PROMPT_SUFFIX;
+const DEFAULT_SYSTEM_PROMPT = [
+  'Diretrizes administrativas complementares para o Agente de IA de Jobs.',
+  '',
+  '- Use linguagem objetiva, cordial e adequada à operação.',
+  '- Priorize o esclarecimento de dúvidas e a confirmação dos dados coletados.',
+  '- Não adicione regras de nomenclatura, campos obrigatórios, genéricos, pontes ou validações fora das fontes publicadas no sistema.',
+  '',
+  'As regras obrigatórias, o catálogo de jobs, os parâmetros, o catálogo oficial de genéricos/pontes e as validações corporativas são aplicados pelo servidor e não podem ser substituídos por este texto.',
+].join('\n');
 
 // ── FUNCTION DECLARATION ─────────────────────────────────────────────────────
 
@@ -92,6 +53,91 @@ const GENERATE_CHECKLIST_TOOL = {
   },
 };
 
+const CATALOG_REFERENCE_SCHEMA = {
+  type: 'object',
+  properties: {
+    code: { type: 'string' },
+    name: { type: 'string' },
+  },
+  description: 'Referência publicada do catálogo, por código e/ou nome.',
+};
+
+const SCHEDULE_SCHEMA = {
+  type: 'object',
+  properties: {
+    kind: { type: 'string', enum: ['one_time', 'datetime', 'recurrence'] },
+    date: { type: 'string', description: 'Data YYYYMMDD ou YYYY-MM-DD para one_time.' },
+    datetime: { type: 'string', description: 'Data e hora ISO ou YYYYMMDDTHHMM para datetime.' },
+    recurrence: { type: 'string', description: 'Expressão de recorrência confirmada pelo usuário.' },
+    time: { type: 'string', description: 'Horário HH:mm ou HH:mm:ss.' },
+    timezone: { type: 'string', description: 'Fuso horário IANA; padrão America/Sao_Paulo.' },
+  },
+  required: ['kind'],
+};
+
+const CAPADOR_SCHEMA = {
+  type: 'object',
+  properties: {
+    applicable: { type: 'boolean' },
+    parameters: { type: 'object' },
+    notes: { type: 'string' },
+  },
+  required: ['applicable'],
+};
+
+/**
+ * Contrato v2 para checklists orientados a Application. O backend ainda
+ * valida todos os dados; esta ferramenta apenas permite que a LIA envie uma
+ * proposta estruturada depois de concluir a coleta conversacional.
+ */
+const GENERATE_APPLICATION_CHECKLIST_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'generate_application_checklist',
+    description:
+      'Finaliza um checklist de Application com um ou mais jobs. Chame somente depois de coletar e confirmar todos os dados obrigatórios, inclusive responsável operacional, genérico, ponte, servidores, agendamento e CAPADOR aplicável.',
+    parameters: {
+      type: 'object',
+      properties: {
+        application: {
+          type: 'object',
+          description: 'Dados compartilhados da Application no Workload.',
+          properties: {
+            name: { type: 'string', description: 'Nome da Application no Workload, não o nome do job, script ou arquivo.' },
+            responsible_name: { type: 'string', description: 'Responsável operacional pela execução.' },
+            requester_name: { type: 'string', description: 'Solicitante, quando diferente do usuário autenticado.' },
+            area: { type: 'string' },
+            contact: { type: 'string' },
+            server_mode: { type: 'string', enum: ['shared', 'per_job', 'not_required'] },
+            shared_server: { type: 'string' },
+            schedule: SCHEDULE_SCHEMA,
+          },
+          required: ['name', 'responsible_name', 'server_mode'],
+        },
+        jobs: {
+          type: 'array',
+          description: 'Jobs da Application, na ordem de execução.',
+          items: {
+            type: 'object',
+            properties: {
+              sequence: { type: 'number' },
+              job_type_id: { type: 'number' },
+              generic: CATALOG_REFERENCE_SCHEMA,
+              bridge: CATALOG_REFERENCE_SCHEMA,
+              server: { type: 'string' },
+              schedule: SCHEDULE_SCHEMA,
+              parameters: { type: 'object' },
+              capador: CAPADOR_SCHEMA,
+            },
+            required: ['sequence', 'job_type_id', 'generic', 'bridge', 'parameters'],
+          },
+        },
+      },
+      required: ['application', 'jobs'],
+    },
+  },
+};
+
 // ── TYPES ────────────────────────────────────────────────────────────────────
 
 type Message = {
@@ -105,6 +151,35 @@ type ToolCall = {
   id: string;
   type: 'function';
   function: { name: string; arguments: string };
+};
+
+type ApplicationChecklistArgs = {
+  request_id?: string;
+  schema_version?: number;
+  application: {
+    name: string;
+    responsible_name: string;
+    requester_name?: string;
+    area?: string;
+    contact?: string;
+    server_mode: 'shared' | 'per_job' | 'not_required';
+    shared_server?: string;
+    schedule?: Record<string, unknown>;
+  };
+  jobs: Array<{
+    sequence: number;
+    job_type_id: number;
+    generic: string | { code?: string; name?: string };
+    bridge: string | { code?: string; name?: string };
+    server?: string;
+    schedule?: Record<string, unknown>;
+    parameters: Record<string, string | string[] | number | boolean | undefined>;
+    capador?: {
+      applicable: boolean;
+      parameters?: Record<string, string | string[] | number | boolean | undefined>;
+      notes?: string;
+    };
+  }>;
 };
 
 type ChatMessage =
@@ -341,7 +416,7 @@ export function AgentView() {
       ]);
       if (loadedJobs.length > 0) {
         setAllJobs(loadedJobs);
-        if (!savedPrompt) setSystemPrompt(buildPromptFromJobs(loadedJobs));
+        if (!savedPrompt) setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
       }
       if (savedPrompt) setSystemPrompt(savedPrompt);
       fetchConversations();
@@ -515,6 +590,97 @@ export function AgentView() {
 
   // ── LIA API CALL ─────────────────────────────────────────────────────────────
 
+  const handleGenerateApplicationChecklist = async (
+    args: ApplicationChecklistArgs,
+    convId?: string | null
+  ): Promise<{ success: boolean; status?: string; checklistId?: string; message?: string; errors?: any[]; warnings?: any[] }> => {
+    const requestId = args.request_id?.trim() || (
+      crypto.randomUUID
+        ? crypto.randomUUID()
+        : 'application-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9)
+    );
+    const applicationName = args.application?.name || 'Application';
+
+    let savedChecklist = null;
+    try {
+      savedChecklist = await checklistService.createApplication({
+        ...args,
+        request_id: requestId,
+        schema_version: 2,
+        conversation_id: convId || currentConversationId || null,
+      });
+    } catch (err) {
+      console.error('Erro na chamada do checklistService.createApplication:', err);
+    }
+
+    if (!savedChecklist) {
+      const errMsg = 'Ainda não foi possível finalizar o checklist da Application. Revise os dados obrigatórios informados para Application, responsável, servidores, genéricos, pontes e agendamento.';
+      addMessage('agent', errMsg, true);
+      return { success: false, message: errMsg };
+    }
+
+    const isSuccess = savedChecklist.status === 'Concluído';
+    const errors = savedChecklist.errors || [];
+    const warnings = savedChecklist.warnings || [];
+    const jobCount = args.jobs?.length || 0;
+
+    const resultNode = (
+      <div className="mt-2 space-y-4 w-full">
+        {isSuccess ? (
+          <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Checklist da Application {applicationName} gerado com sucesso para {jobCount} {jobCount === 1 ? 'job' : 'jobs'}.</span>
+          </div>
+        ) : (
+          <div className="space-y-2 bg-red-50 p-4 rounded-xl border border-red-200 text-red-900 text-sm">
+            <div className="flex items-center gap-2 font-bold text-red-700">
+              <X className="w-4 h-4 shrink-0" />
+              <span>Checklist da Application ainda possui pendências</span>
+            </div>
+            <div className="mt-2 space-y-1 max-h-40 overflow-y-auto pr-1">
+              {errors.map((err: any, i: number) => (
+                <div key={i} className="text-xs bg-red-100/50 p-2 rounded border border-red-200">
+                  <span className="font-semibold text-red-800">[{err.ruleCode || 'PENDÊNCIA'}] {err.field || 'Checklist'}:</span> {err.message || String(err)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {warnings.length > 0 && (
+          <div className="space-y-1 bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 text-xs">
+            {warnings.map((warn: any, i: number) => (
+              <div key={i}><span className="font-semibold">[{warn.ruleCode || 'AVISO'}]</span> {warn.message || String(warn)}</div>
+            ))}
+          </div>
+        )}
+
+        {isSuccess && savedChecklist.id && (
+          <button
+            onClick={() =>
+              downloadChecklistPDF(
+                savedChecklist.id,
+                'Checklist_' + applicationName.replace(/\s+/g, '_') + '.pdf'
+              )
+            }
+            className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl font-medium transition-colors shadow-sm text-sm shadow-emerald-600/20 active:scale-95"
+          >
+            <FileDown className="w-4 h-4" /> Baixar PDF do Checklist
+          </button>
+        )}
+      </div>
+    );
+
+    addMessage('agent', resultNode, !isSuccess);
+    return {
+      success: isSuccess,
+      status: savedChecklist.status,
+      checklistId: savedChecklist.id,
+      errors,
+      warnings,
+    };
+  };
+
   const callLIA = async (input: string, history: ChatMessage[]) => {
     setIsLoading(true);
     let updatedHistory: ChatMessage[] = history;
@@ -525,7 +691,7 @@ export function AgentView() {
 
       const response = await api.post<LIAResponse>('/ai/chat', {
         messages,
-        tools: [GENERATE_CHECKLIST_TOOL],
+        tools: [GENERATE_APPLICATION_CHECKLIST_TOOL],
         conversation_id: currentConversationId || undefined,
         model: selectedModel || undefined,
       });
@@ -546,23 +712,29 @@ export function AgentView() {
 
       if (assistantMsg.tool_calls?.length) {
         for (const toolCall of assistantMsg.tool_calls) {
-          if (toolCall.function.name === 'generate_checklist') {
+          if (
+            toolCall.function.name === 'generate_checklist' ||
+            toolCall.function.name === 'generate_application_checklist'
+          ) {
             let success = false;
             let toolFeedback = "";
             try {
               const args = JSON.parse(toolCall.function.arguments);
-              if (!args || typeof args !== 'object' || typeof args.job_type_id !== 'number' || typeof args.collected_data !== 'object') {
+              if (!args || typeof args !== 'object') {
                 throw new Error("Formato inválido de argumentos para a função generate_checklist. Esperado 'job_type_id' e 'collected_data'.");
               }
 
-              const result = await handleGenerateChecklist(args, response.conversation_id || currentConversationId);
+              const result = toolCall.function.name === 'generate_application_checklist'
+                ? await handleGenerateApplicationChecklist(args as ApplicationChecklistArgs, response.conversation_id || currentConversationId)
+                : await handleGenerateChecklist(args, response.conversation_id || currentConversationId);
               if (result && result.success) {
                 success = true;
                 toolFeedback = `Checklist criado com sucesso. Status: ${result.status}. ID: ${result.checklistId}`;
               } else {
                 success = false;
                 const errorDetails = result?.errors?.map((e: any) => `- Campo "${e.field}": ${e.message} (Regra: ${e.ruleCode})`).join('\n') || '';
-                toolFeedback = `Falha na validação do checklist. Status: ${result?.status || 'Falha Validação'}.\nErros de validação:\n${errorDetails}\nPor favor, informe ao usuário sobre estes erros de validação e continue a conversa fazendo as perguntas necessárias para que ele corrija os valores inválidos. NÃO exiba mensagem de sucesso.`;
+                const warningDetails = result?.warnings?.map((w: any) => `- ${w.message || String(w)}`).join('\n') || '';
+                toolFeedback = `Falha na validação do checklist. Status: ${result?.status || 'Falha Validação'}.\nErros de validação:\n${errorDetails}\nAvisos e sugestões publicados:\n${warningDetails}\nPor favor, informe ao usuário sobre estes erros de validação e continue a conversa fazendo as perguntas necessárias para que ele corrija os valores inválidos. NÃO exiba mensagem de sucesso.`;
               }
             } catch (err: any) {
               console.error("Falha ao processar tool call:", err);
@@ -699,7 +871,7 @@ export function AgentView() {
                   <MessageSquare className="w-3 h-3" /> Instruções de IA (Prompt)
                 </h4>
                 <p className="text-xs text-slate-500 bg-blue-50 p-3 rounded-lg border border-blue-100 italic">
-                  Defina o tom de voz e regras que o agente deve seguir ao interagir.
+                  Defina diretrizes complementares de tom e operação. Regras obrigatórias, catálogo e validações corporativas são aplicados pelo servidor.
                 </p>
                 <textarea
                   value={systemPrompt}
@@ -756,7 +928,7 @@ export function AgentView() {
                 Salvar Instruções
               </button>
               <button
-                onClick={() => setSystemPrompt(allJobs.length > 0 ? buildPromptFromJobs(allJobs) : DEFAULT_SYSTEM_PROMPT)}
+                onClick={() => setSystemPrompt(DEFAULT_SYSTEM_PROMPT)}
                 className="w-full mt-2 text-xs text-slate-400 hover:text-slate-600 font-medium py-2 transition-colors"
               >
                 Resetar para padrão
@@ -910,9 +1082,8 @@ export function AgentView() {
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSend()}
-            placeholder={isLoading ? 'Agente está pensando...' : 'Digite sua mensagem...'}
-            disabled={isLoading}
-            className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all disabled:opacity-50"
+            placeholder="Digite sua mensagem..."
+            className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
           />
           <button
             onClick={handleSend}
