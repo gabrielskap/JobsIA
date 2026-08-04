@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Users, UserPlus, X, Pencil, Shield, CheckCircle, XCircle } from 'lucide-react';
+import { useEffect, useState, useMemo, type FormEvent } from 'react';
+import { Users, UserPlus, X, Pencil, Shield, CheckCircle, XCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Profile } from '../types/database';
 
@@ -7,6 +7,43 @@ export default function UsersPage() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Search & Pagination
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  // Filtered, sorted & paginated users
+  const filteredUsers = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    const filtered = term
+      ? users.filter(u =>
+          (u.name || '').toLowerCase().includes(term) ||
+          u.email.toLowerCase().includes(term) ||
+          (u.matricula || '').toLowerCase().includes(term)
+        )
+      : [...users];
+
+    // Alphabetical order by name
+    filtered.sort((a, b) => {
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB, 'pt-BR');
+    });
+
+    return filtered;
+  }, [users, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / ITEMS_PER_PAGE));
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredUsers.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredUsers, currentPage]);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -162,6 +199,20 @@ export default function UsersPage() {
         </button>
       </div>
 
+      {/* Search Bar */}
+      {!loading && !error && (
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder="Pesquisar por nome, e-mail ou matrícula..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow shadow-sm"
+          />
+        </div>
+      )}
+
       {loading && (
         <div className="flex items-center justify-center py-16">
           <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -174,8 +225,10 @@ export default function UsersPage() {
 
       {!loading && !error && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-          {users.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-12">Nenhum usuário encontrado.</p>
+          {filteredUsers.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-12">
+              {searchTerm ? 'Nenhum usuário encontrado para a pesquisa.' : 'Nenhum usuário cadastrado.'}
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[700px]">
@@ -191,7 +244,7 @@ export default function UsersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {users.map(u => (
+                  {paginatedUsers.map(u => (
                     <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-4 font-medium text-slate-800">
                         <div className="flex items-center gap-3">
@@ -233,6 +286,56 @@ export default function UsersPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {filteredUsers.length > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between px-6 py-3 border-t border-slate-100 bg-slate-50/50">
+              <span className="text-xs text-slate-500">
+                Mostrando {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredUsers.length)} de {filteredUsers.length} usuários
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(page => {
+                    if (totalPages <= 7) return true;
+                    if (page === 1 || page === totalPages) return true;
+                    if (Math.abs(page - currentPage) <= 1) return true;
+                    return false;
+                  })
+                  .map((page, idx, arr) => {
+                    const showEllipsis = idx > 0 && page - arr[idx - 1] > 1;
+                    return (
+                      <span key={page} className="flex items-center">
+                        {showEllipsis && <span className="px-1 text-xs text-slate-400">…</span>}
+                        <button
+                          onClick={() => setCurrentPage(page)}
+                          className={`min-w-[32px] h-8 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                            page === currentPage
+                              ? 'bg-blue-600 text-white shadow-sm'
+                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      </span>
+                    );
+                  })}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>

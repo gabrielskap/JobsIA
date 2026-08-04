@@ -22,7 +22,7 @@ const knowledgeItems = [
   { to: '/dicionario', icon: Book,     label: 'Dicionário de Dados',  activeClass: 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm', adminOnly: false },
   { to: '/normas',     icon: FileCode, label: 'Norma N/PD/004/02',    activeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm', adminOnly: false },
   { to: '/jobs',       icon: Server,   label: 'Mapeamento de Jobs',   activeClass: 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm', adminOnly: false },
-  { to: '/catalogo-oficial', icon: Database, label: 'Catálogo Oficial', activeClass: 'bg-cyan-50 text-cyan-800 border border-cyan-200 shadow-sm', adminOnly: true },
+  // { to: '/catalogo-oficial', icon: Database, label: 'Catálogo Oficial', activeClass: 'bg-cyan-50 text-cyan-800 border border-cyan-200 shadow-sm', adminOnly: true },
   { to: '/ajuda',      icon: HelpCircle, label: 'Ajuda / Manual',      activeClass: 'bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm', adminOnly: false },
 ] as const;
 
