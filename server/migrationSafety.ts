@@ -10,6 +10,27 @@ function blankPreservingLines(value: string): string {
   return value.replace(/[^\r\n]/g, ' ');
 }
 
+function isEscapeStringLiteral(sql: string, quoteIndex: number): boolean {
+  const prefixIndex = quoteIndex - 1;
+  if (prefixIndex < 0 || !/[Ee]/.test(sql[prefixIndex])) {
+    return false;
+  }
+
+  const characterBeforePrefix = sql[prefixIndex - 1];
+  return !characterBeforePrefix || !/[A-Za-z0-9_$\u0080-\uFFFF]/.test(characterBeforePrefix);
+}
+
+function isDollarQuoteStart(sql: string, dollarIndex: number): boolean {
+  const characterBeforeDollar = sql[dollarIndex - 1];
+  // PostgreSQL requires whitespace between an identifier/keyword and a
+  // dollar-quoted string. A dollar within an unquoted identifier is not a
+  // delimiter and must remain visible to the transaction-control scanner.
+  // Treat every non-ASCII character conservatively as identifier content too.
+  // PostgreSQL accepts non-ASCII letters in unquoted identifiers, while a
+  // false negative here would hide the rest of a migration from the guard.
+  return !characterBeforeDollar || !/[A-Za-z0-9_$\u0080-\uFFFF]/.test(characterBeforeDollar);
+}
+
 /**
  * Masks comments and literal bodies while preserving the original length. This
  * lets the migration guard inspect executable SQL without being confused by a
@@ -47,6 +68,7 @@ function maskSql(sql: string, maskDoubleQuotedIdentifiers: boolean): string {
     }
 
     if (sql[index] === "'") {
+      const escapeStringLiteral = isEscapeStringLiteral(sql, index);
       let cursor = index + 1;
       while (cursor < sql.length) {
         if (sql[cursor] === "'") {
@@ -57,7 +79,7 @@ function maskSql(sql: string, maskDoubleQuotedIdentifiers: boolean): string {
           cursor++;
           break;
         }
-        if (sql[cursor] === '\\' && cursor + 1 < sql.length) {
+        if (escapeStringLiteral && sql[cursor] === '\\' && cursor + 1 < sql.length) {
           cursor += 2;
           continue;
         }
@@ -86,7 +108,7 @@ function maskSql(sql: string, maskDoubleQuotedIdentifiers: boolean): string {
       continue;
     }
 
-    if (sql[index] === '$') {
+    if (sql[index] === '$' && isDollarQuoteStart(sql, index)) {
       const dollarTag = sql.slice(index).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/)?.[0];
       if (dollarTag) {
         const end = sql.indexOf(dollarTag, index + dollarTag.length);
@@ -135,6 +157,14 @@ export function normalizeMigrationTransaction(sql: string): string {
   const remainingTransactionControl = /(?:^|;)\s*(?:BEGIN\b[^;]*|START\s+TRANSACTION\b[^;]*|COMMIT\b[^;]*|END\b[^;]*|ROLLBACK\b[^;]*|ABORT\b[^;]*|PREPARE\s+TRANSACTION\b[^;]*)(?:;|$)/i;
   if (remainingTransactionControl.test(maskSql(normalized, true))) {
     throw new Error('A migration cannot control its own transaction; use no BEGIN, COMMIT, END, ROLLBACK, ABORT, or prepared transaction commands.');
+  }
+
+  // The runner forces standard_conforming_strings to `on` before execution.
+  // Migrations cannot change session state: a different parser setting could
+  // make a backslash mean something different to PostgreSQL and this scanner.
+  const changesSessionState = /(?:^|;)\s*(?:SET|RESET|DISCARD)\b[^;]*(?:;|$)/i;
+  if (changesSessionState.test(maskSql(normalized, true))) {
+    throw new Error('A migration cannot execute standalone SET, RESET, or DISCARD commands.');
   }
 
   return normalized;

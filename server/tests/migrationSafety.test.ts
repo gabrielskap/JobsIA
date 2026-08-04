@@ -67,6 +67,59 @@ END`;
   assert.throws(() => normalizeMigrationTransaction(sql), Error);
 });
 
+test('does not treat a backslash as an escape in an ordinary PostgreSQL string', () => {
+  const sql = "DO $$\nBEGIN\n  EXECUTE 'DROP TABLE public.users';\nEND\n$$;\nSELECT 'x\\'; END";
+
+  assert.equal(findUsersDestructiveOperation(sql), undefined);
+  assert.throws(() => normalizeMigrationTransaction(sql), Error);
+});
+
+test('does not treat a dollar inside an identifier as a dollar-quote delimiter', () => {
+  const sql = `DO $$
+BEGIN
+  EXECUTE 'DROP TABLE public.users';
+END
+$$;
+SELECT 1 AS safe$tag$;
+END`;
+
+  assert.equal(findUsersDestructiveOperation(sql), undefined);
+  assert.throws(() => normalizeMigrationTransaction(sql), Error);
+});
+
+test('does not treat a dollar after a Unicode identifier as a dollar-quote delimiter', () => {
+  const sql = `DO $$
+BEGIN
+  EXECUTE 'DROP TABLE public.users';
+END
+$$;
+SELECT 1 AS é$tag$;
+END`;
+
+  assert.equal(findUsersDestructiveOperation(sql), undefined);
+  assert.throws(() => normalizeMigrationTransaction(sql), Error);
+});
+
+test('does not treat a string after a Unicode identifier as an E string', () => {
+  const sql = "DO $$\nBEGIN\n  EXECUTE 'DROP TABLE public.users';\nEND\n$$;\nSELECT éE'x\\'; END";
+
+  assert.equal(findUsersDestructiveOperation(sql), undefined);
+  assert.throws(() => normalizeMigrationTransaction(sql), Error);
+});
+
+test('continues to recognize escaped quotes inside PostgreSQL E strings', () => {
+  const sql = "BEGIN;\nSELECT E'foo\\'; END';\nCOMMIT;";
+
+  assert.doesNotThrow(() => normalizeMigrationTransaction(sql));
+});
+
+test('rejects standalone PostgreSQL session-setting commands', () => {
+  assert.throws(() => normalizeMigrationTransaction("SET standard_conforming_strings = 'off';"), Error);
+  assert.throws(() => normalizeMigrationTransaction('SET search_path = public;'), Error);
+  assert.throws(() => normalizeMigrationTransaction('RESET ALL;'), Error);
+  assert.throws(() => normalizeMigrationTransaction('DISCARD ALL;'), Error);
+});
+
 test('does not flag comments or the non-destructive historical users migration', () => {
   assert.equal(findUsersDestructiveOperation('-- DROP TABLE users;'), undefined);
 

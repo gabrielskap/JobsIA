@@ -152,10 +152,15 @@ async function run() {
       // committed or rolled back as one unit.
       await client.query('BEGIN');
       try {
+        await client.query("SET LOCAL standard_conforming_strings = 'on'");
         const usersBefore = await lockAndCaptureUsers(client);
         await client.query(migrationSql);
-        await assertUsersPreserved(client, usersBefore);
         await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file]);
+        // A migration can create a trigger on schema_migrations. Run the
+        // invariant only after this insert and force deferred triggers before
+        // the final check, while the transaction can still be rolled back.
+        await client.query('SET CONSTRAINTS ALL IMMEDIATE');
+        await assertUsersPreserved(client, usersBefore);
         await client.query('COMMIT');
         console.log(`✅ Migração ${file} aplicada com sucesso.`);
         appliedCount++;
