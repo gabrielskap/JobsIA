@@ -32,6 +32,22 @@ export const normService = {
     }
   },
 
+  async updateApplicability(
+    id: string,
+    aplicabilidadeJob: number[] | null
+  ): Promise<{ data: NormRule | null; error: string | null }> {
+    try {
+      const data = await api.put<NormRule>(`/norms/${id}/applicability`, {
+        aplicabilidade_job: aplicabilidadeJob,
+      });
+      return { data, error: null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao atualizar a aplicabilidade da regra';
+      console.error('normService.updateApplicability:', err);
+      return { data: null, error: msg };
+    }
+  },
+
   async remove(id: string): Promise<boolean> {
     try {
       await api.delete(`/norms/${id}`);

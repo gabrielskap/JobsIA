@@ -6,6 +6,66 @@ import { aiCache } from '../routes/ai';
 const router = Router();
 router.use(requireAuth);
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_APPLICABLE_JOB_TYPES = 100;
+
+type JobApplicabilityValidation =
+  | { valid: true; value: number[] | null }
+  | { valid: false; message: string };
+
+/**
+ * The database uses NULL to mean that a rule applies to every job type. An
+ * empty list would instead silently make a published rule apply to no jobs,
+ * so the API requires the UI to send null for the "Todos" option.
+ */
+export function validateJobApplicability(value: unknown): JobApplicabilityValidation {
+  if (value === null) {
+    return { valid: true, value: null };
+  }
+
+  if (!Array.isArray(value)) {
+    return {
+      valid: false,
+      message: '"aplicabilidade_job" deve ser uma lista de IDs de tipos de job ou null para todos os tipos.',
+    };
+  }
+
+  if (value.length === 0) {
+    return {
+      valid: false,
+      message: 'Informe ao menos um tipo de job ou use null para aplicar a regra a todos os tipos.',
+    };
+  }
+
+  if (value.length > MAX_APPLICABLE_JOB_TYPES) {
+    return {
+      valid: false,
+      message: `A aplicabilidade aceita no máximo ${MAX_APPLICABLE_JOB_TYPES} tipos de job.`,
+    };
+  }
+
+  if (!value.every((jobTypeId) => Number.isSafeInteger(jobTypeId) && jobTypeId > 0)) {
+    return {
+      valid: false,
+      message: 'Cada tipo de job deve ser um número inteiro positivo.',
+    };
+  }
+
+  const jobTypeIds = value as number[];
+  if (new Set(jobTypeIds).size !== jobTypeIds.length) {
+    return {
+      valid: false,
+      message: 'A lista de tipos de job não pode conter IDs duplicados.',
+    };
+  }
+
+  return { valid: true, value: [...jobTypeIds].sort((left, right) => left - right) };
+}
+
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 router.get('/', async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -98,6 +158,115 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   } catch (err) {
     console.error('norms.update:', err);
     res.status(500).json({ message: 'Erro ao atualizar norma' });
+  }
+});
+
+/**
+ * Updates the job-type scope of a currently published rule in place. This is
+ * deliberately narrower than the versioned PUT above: it accepts only the
+ * scope field, validates it against the catalog, and records the before/after
+ * values in the administrative audit log.
+ */
+router.put('/:id/applicability', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ message: 'ID da norma inválido.' });
+    return;
+  }
+
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    res.status(400).json({ message: 'Informe somente "aplicabilidade_job" no corpo da requisição.' });
+    return;
+  }
+
+  const bodyKeys = Object.keys(req.body);
+  if (bodyKeys.length !== 1 || bodyKeys[0] !== 'aplicabilidade_job') {
+    res.status(400).json({ message: 'Este endpoint permite atualizar somente "aplicabilidade_job".' });
+    return;
+  }
+
+  const applicability = validateJobApplicability(req.body.aplicabilidade_job);
+  if (!applicability.valid) {
+    res.status(400).json({ message: applicability.message });
+    return;
+  }
+
+  const client = await pool.connect();
+  let transactionOpen = false;
+  try {
+    await client.query('BEGIN');
+    transactionOpen = true;
+
+    const { rows: current } = await client.query(
+      `SELECT id, codigo, aplicabilidade_job, ativo, status
+       FROM "JobsIA_validation_rules"
+       WHERE id = $1
+       FOR UPDATE`,
+      [id]
+    );
+    if (current.length === 0) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      res.status(404).json({ message: 'Norma não encontrada.' });
+      return;
+    }
+
+    const rule = current[0];
+    if (!rule.ativo || rule.status !== 'PUBLICADO') {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      res.status(409).json({
+        message: 'A aplicabilidade pode ser alterada diretamente apenas em uma norma ativa e publicada.',
+      });
+      return;
+    }
+
+    if (applicability.value !== null) {
+      const { rows: knownJobTypes } = await client.query<{ id: number }>(
+        'SELECT id FROM "JobsIA_types" WHERE id = ANY($1::integer[])',
+        [applicability.value]
+      );
+      const knownIds = new Set(knownJobTypes.map((jobType) => jobType.id));
+      const unknownIds = applicability.value.filter((jobTypeId) => !knownIds.has(jobTypeId));
+      if (unknownIds.length > 0) {
+        await client.query('ROLLBACK');
+        transactionOpen = false;
+        res.status(400).json({
+          message: `Tipos de job inexistentes: ${unknownIds.join(', ')}.`,
+        });
+        return;
+      }
+    }
+
+    const { rows } = await client.query(
+      `UPDATE "JobsIA_validation_rules"
+       SET aplicabilidade_job = $1
+       WHERE id = $2
+       RETURNING *, ambiente AS environment, texto_orientacao AS rule, ativo AS active`,
+      [applicability.value, id]
+    );
+
+    await client.query('COMMIT');
+    transactionOpen = false;
+
+    // The validation query reads from the database per request, while this
+    // cache supplies the Agent's consolidated knowledge prompt.
+    aiCache.clear();
+    await logAudit(req.userId, 'UPDATE_NORM_APPLICABILITY', {
+      id,
+      code: rule.codigo,
+      previous_aplicabilidade_job: rule.aplicabilidade_job,
+      aplicabilidade_job: applicability.value,
+    }, req.ip);
+    res.json(rows[0]);
+  } catch (err) {
+    if (transactionOpen) {
+      await client.query('ROLLBACK');
+    }
+    console.error('norms.updateApplicability:', err);
+    res.status(500).json({ message: 'Erro ao atualizar a aplicabilidade da norma.' });
+  } finally {
+    client.release();
   }
 });
 

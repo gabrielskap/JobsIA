@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { Book, Database, FileCode, Server, Plus, Trash2, X, Edit2, Loader2 } from 'lucide-react';
+import { Book, Database, FileCode, Server, Plus, Trash2, X, Edit2, Loader2, SlidersHorizontal } from 'lucide-react';
 import { dictionaryService } from '../services/dictionaryService';
 import { normService } from '../services/normService';
 import { jobService } from '../services/jobService';
@@ -202,11 +202,16 @@ export function DictionaryView() {
 
 export function NormsView() {
   const [rules, setRules] = useState<NormRule[]>([]);
+  const [jobTypes, setJobTypes] = useState<JobTypeWithParameters[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [applicabilityRule, setApplicabilityRule] = useState<NormRule | null>(null);
+  const [applicableJobIds, setApplicableJobIds] = useState<number[] | null>(null);
+  const [applicabilitySaving, setApplicabilitySaving] = useState(false);
+  const [applicabilityError, setApplicabilityError] = useState<string | null>(null);
   const [formData, setFormData] = useState({ environment: '', rule: '' });
 
   const loadRules = async () => {
@@ -215,12 +220,18 @@ export function NormsView() {
   };
 
   useEffect(() => {
-    normService.seedIfEmpty().then(() =>
-      normService.getAll().then(data => {
-        setRules(data);
-        setLoading(false);
-      })
-    );
+    const load = async () => {
+      await normService.seedIfEmpty();
+      const [rulesData, jobsData] = await Promise.all([
+        normService.getAll(),
+        jobService.getAll(),
+      ]);
+      setRules(rulesData);
+      setJobTypes(jobsData);
+      setLoading(false);
+    };
+
+    void load();
   }, []);
 
   const handleSave = async (e: FormEvent) => {
@@ -257,6 +268,83 @@ export function NormsView() {
     setEditingId(rule.id);
     setFormData({ environment: rule.environment, rule: rule.rule });
     setIsAdding(false);
+  };
+
+  const getJobTypeLabel = (jobTypeId: number) => {
+    const jobType = jobTypes.find((job) => job.id === jobTypeId);
+    return jobType ? `Tipo ${jobType.id} — ${jobType.name}` : `Tipo ${jobTypeId}`;
+  };
+
+  const getApplicabilityLabel = (applicability: number[] | undefined) => {
+    if (!Array.isArray(applicability)) return 'Todos os tipos de job';
+    if (applicability.length === 0) return 'Nenhum tipo selecionado';
+    return applicability
+      .slice()
+      .sort((left, right) => left - right)
+      .map(getJobTypeLabel)
+      .join(', ');
+  };
+
+  const canConfigureApplicability = (rule: NormRule) =>
+    rule.active === true && rule.status === 'PUBLICADO';
+
+  const openApplicabilityEditor = (rule: NormRule) => {
+    setApplicabilityRule(rule);
+    setApplicableJobIds(
+      Array.isArray(rule.aplicabilidade_job)
+        ? [...rule.aplicabilidade_job].sort((left, right) => left - right)
+        : null
+    );
+    setApplicabilityError(null);
+    setEditingId(null);
+    setIsAdding(false);
+  };
+
+  const closeApplicabilityEditor = () => {
+    if (applicabilitySaving) return;
+    setApplicabilityRule(null);
+    setApplicableJobIds(null);
+    setApplicabilityError(null);
+  };
+
+  const enableSelectedJobTypes = () => {
+    setApplicableJobIds((current) => current ?? []);
+  };
+
+  const toggleApplicableJobType = (jobTypeId: number) => {
+    setApplicableJobIds((current) => {
+      const selected = current ?? [];
+      return selected.includes(jobTypeId)
+        ? selected.filter((id) => id !== jobTypeId)
+        : [...selected, jobTypeId].sort((left, right) => left - right);
+    });
+  };
+
+  const saveApplicability = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!applicabilityRule) return;
+
+    if (applicableJobIds !== null && applicableJobIds.length === 0) {
+      setApplicabilityError('Selecione pelo menos um tipo de job ou escolha “Todos os tipos de job”.');
+      return;
+    }
+
+    setApplicabilitySaving(true);
+    setApplicabilityError(null);
+    const { data, error: updateError } = await normService.updateApplicability(
+      applicabilityRule.id,
+      applicableJobIds
+    );
+
+    if (data) {
+      setRules((current) => current.map((rule) => rule.id === data.id ? { ...rule, ...data } : rule));
+      setApplicabilityRule(null);
+      setApplicableJobIds(null);
+    } else {
+      setApplicabilityError(updateError ?? 'Não foi possível atualizar a aplicabilidade da regra.');
+    }
+
+    setApplicabilitySaving(false);
   };
 
   const removeRule = async (id: string) => {
@@ -362,6 +450,161 @@ export function NormsView() {
         </form>
       )}
 
+      {applicabilityRule && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/30 backdrop-blur-sm p-0 sm:p-6 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rule-applicability-title"
+        >
+          <form
+            onSubmit={saveApplicability}
+            className="w-full max-w-3xl max-h-[100dvh] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto bg-white p-4 sm:p-6 rounded-none sm:rounded-2xl border border-slate-200 shadow-2xl animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
+          >
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h3 id="rule-applicability-title" className="font-bold text-slate-800 text-base sm:text-lg flex items-center gap-2">
+                  <SlidersHorizontal className="w-5 h-5 text-emerald-600" />
+                  Aplicabilidade por Tipo de Job
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Defina em quais tipos de job a regra <span className="font-medium text-slate-700">{applicabilityRule.codigo ?? applicabilityRule.rule}</span> será validada.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeApplicabilityEditor}
+                disabled={applicabilitySaving}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+                aria-label="Fechar configuração de aplicabilidade"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <fieldset className="mt-5">
+              <legend className="text-xs font-bold text-slate-500 uppercase tracking-wider">Aplicar regra em</legend>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className={`cursor-pointer rounded-xl border p-4 transition-colors ${
+                  applicableJobIds === null
+                    ? 'border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500/20'
+                    : 'border-slate-200 bg-white hover:border-emerald-300'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      name="rule-applicability"
+                      checked={applicableJobIds === null}
+                      onChange={() => setApplicableJobIds(null)}
+                      className="mt-0.5 border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>
+                      <span className="block font-semibold text-slate-800">Todos os tipos de job</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-slate-500">A regra será validada para qualquer tipo de job.</span>
+                    </span>
+                  </div>
+                </label>
+
+                <label className={`cursor-pointer rounded-xl border p-4 transition-colors ${
+                  applicableJobIds !== null
+                    ? 'border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500/20'
+                    : 'border-slate-200 bg-white hover:border-emerald-300'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      name="rule-applicability"
+                      checked={applicableJobIds !== null}
+                      onChange={enableSelectedJobTypes}
+                      className="mt-0.5 border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>
+                      <span className="block font-semibold text-slate-800">Somente tipos selecionados</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-slate-500">Escolha os tipos de job aos quais esta regra se aplica.</span>
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </fieldset>
+
+            {applicableJobIds !== null && (
+              <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-semibold text-slate-700">Tipos de job selecionados</h4>
+                    <p className="mt-0.5 text-xs text-slate-500">Selecione pelo menos um tipo para salvar esta opção.</p>
+                  </div>
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                    {applicableJobIds.length} selecionado{applicableJobIds.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                {jobTypes.length > 0 ? (
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {jobTypes.map((jobType) => (
+                      <label
+                        key={jobType.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+                          applicableJobIds.includes(jobType.id)
+                            ? 'border-emerald-300 bg-emerald-50'
+                            : 'border-slate-200 bg-white hover:border-emerald-200'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={applicableJobIds.includes(jobType.id)}
+                          onChange={() => toggleApplicableJobType(jobType.id)}
+                          className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-slate-700">Tipo {jobType.id}</span>
+                          <span className="block truncate text-xs text-slate-500">{jobType.name}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Nenhum tipo de job foi encontrado. Cadastre ou carregue os tipos no Mapeamento de Jobs antes de usar uma seleção específica.
+                  </p>
+                )}
+              </section>
+            )}
+
+            <div className="mt-5 rounded-lg border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-sm text-emerald-900">
+              <span className="font-semibold">Resultado:</span>{' '}
+              {getApplicabilityLabel(applicableJobIds ?? undefined)}
+            </div>
+
+            {applicabilityError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {applicabilityError}
+              </div>
+            )}
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="submit"
+                disabled={applicabilitySaving || (applicableJobIds !== null && applicableJobIds.length === 0)}
+                className="flex-1 bg-emerald-600 text-white font-semibold py-2.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {applicabilitySaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Salvar Aplicabilidade
+              </button>
+              <button
+                type="button"
+                onClick={closeApplicabilityEditor}
+                disabled={applicabilitySaving}
+                className="px-6 bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg hover:bg-slate-300 transition-colors disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-16 text-slate-400">
           <Loader2 className="w-6 h-6 animate-spin mr-2" /> Carregando regras...
@@ -369,12 +612,13 @@ export function NormsView() {
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[500px]">
+            <table className="w-full text-left border-collapse min-w-[760px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="p-4 font-semibold text-slate-700 w-1/4">Ambiente</th>
+                  <th className="p-4 font-semibold text-slate-700 w-44">Ambiente</th>
                   <th className="p-4 font-semibold text-slate-700">Regra de Validação</th>
-                  <th className="p-4 font-semibold text-slate-700 w-24 text-right">Ações</th>
+                  <th className="p-4 font-semibold text-slate-700 w-72">Aplicabilidade</th>
+                  <th className="p-4 font-semibold text-slate-700 w-28 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -385,8 +629,41 @@ export function NormsView() {
                   >
                     <td className="p-4 font-medium text-slate-800">{rule.environment}</td>
                     <td className="p-4 text-slate-600 text-sm">{rule.rule}</td>
+                    <td className="p-4">
+                      <span
+                        className={`inline-flex max-w-full rounded-full border px-2.5 py-1 text-xs font-medium ${
+                          Array.isArray(rule.aplicabilidade_job)
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-600'
+                        }`}
+                        title={getApplicabilityLabel(rule.aplicabilidade_job)}
+                      >
+                        <span className="truncate">{getApplicabilityLabel(rule.aplicabilidade_job)}</span>
+                      </span>
+                      {!canConfigureApplicability(rule) && (
+                        <p className="mt-1 text-[11px] text-slate-400">Disponível após publicar a regra.</p>
+                      )}
+                    </td>
                     <td className="p-4 text-right">
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {canConfigureApplicability(rule) ? (
+                          <button
+                            onClick={() => openApplicabilityEditor(rule)}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                            title="Configurar aplicabilidade por tipo de job"
+                            aria-label={`Configurar aplicabilidade da regra ${rule.codigo ?? rule.rule}`}
+                          >
+                            <SlidersHorizontal className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <span
+                            className="p-1.5 text-slate-300 cursor-not-allowed"
+                            title="Publique a regra para configurar sua aplicabilidade."
+                            aria-label="Aplicabilidade disponível após publicar a regra"
+                          >
+                            <SlidersHorizontal className="w-4 h-4" />
+                          </span>
+                        )}
                         <button
                           onClick={() => startEdit(rule)}
                           className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"

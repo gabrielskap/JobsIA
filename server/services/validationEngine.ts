@@ -432,13 +432,6 @@ export const validationEngine = {
       let fieldVal = data[rule.campo_alvo];
       if ((fieldVal === undefined || fieldVal === null || String(fieldVal).trim() === '') && rule.campo_alvo === 'file_name') {
         fieldVal = data.file_name || data.shell_name || data.program_name || data.nome_arquivo || data.nome_script;
-        if (fieldVal === undefined || fieldVal === null || String(fieldVal).trim() === '') {
-          // Fallback para o primeiro valor que não seja propriedades internas
-          const entries = Object.entries(data).find(([k, v]) => !k.startsWith('__') && k !== 'ambiente' && k !== 'environment' && v);
-          if (entries) {
-            fieldVal = entries[1];
-          }
-        }
       }
       if ((fieldVal === undefined || fieldVal === null || String(fieldVal).trim() === '') && rule.campo_alvo === 'object_name') {
         fieldVal = data.object_name || data.nome_objeto || data.objeto || data.program_name;

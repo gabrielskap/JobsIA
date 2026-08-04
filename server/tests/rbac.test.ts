@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { app } from '../app';
 import { pool } from '../db';
+import { aiCache } from '../routes/ai';
 
 interface TestUser {
   id: string;
@@ -222,6 +223,88 @@ test('Permissões - Deve permitir SOLICITANTE de ler normas (base de conheciment
     .get('/api/norms')
     .set('Authorization', `Bearer ${solicitante1.token}`);
   assert.strictEqual(res.status, 200);
+});
+
+test('Norm scope applicability is restricted to ADMIN and is audited', async () => {
+  const created = await request(app)
+    .post('/api/norms')
+    .set('Authorization', `Bearer ${adminUser.token}`)
+    .send({ environment: 'UNIX / LINUX', rule: 'Rule scope test' });
+
+  assert.strictEqual(created.status, 201);
+  const ruleId = created.body.id;
+
+  try {
+    const approved = await request(app)
+      .post(`/api/norms/${ruleId}/approve`)
+      .set('Authorization', `Bearer ${adminUser.token}`);
+    assert.strictEqual(approved.status, 200);
+
+    const published = await request(app)
+      .post(`/api/norms/${ruleId}/publish`)
+      .set('Authorization', `Bearer ${adminUser.token}`);
+    assert.strictEqual(published.status, 200);
+
+    const forbidden = await request(app)
+      .put(`/api/norms/${ruleId}/applicability`)
+      .set('Authorization', `Bearer ${operadorUser.token}`)
+      .send({ aplicabilidade_job: [3] });
+    assert.strictEqual(forbidden.status, 403);
+
+    const invalidBody = await request(app)
+      .put(`/api/norms/${ruleId}/applicability`)
+      .set('Authorization', `Bearer ${adminUser.token}`)
+      .send({ aplicabilidade_job: [] });
+    assert.strictEqual(invalidBody.status, 400);
+
+    const unknownJobType = await request(app)
+      .put(`/api/norms/${ruleId}/applicability`)
+      .set('Authorization', `Bearer ${adminUser.token}`)
+      .send({ aplicabilidade_job: [999999999] });
+    assert.strictEqual(unknownJobType.status, 400);
+
+    const beforeUpdate = await pool.query(
+      'SELECT codigo, version, status, ativo, texto_orientacao FROM "JobsIA_validation_rules" WHERE id = $1',
+      [ruleId]
+    );
+    aiCache.set('consolidated_prompt', { prompt: 'stale norm catalog' });
+    const updated = await request(app)
+      .put(`/api/norms/${ruleId}/applicability`)
+      .set('Authorization', `Bearer ${adminUser.token}`)
+      .send({ aplicabilidade_job: [10, 3] });
+
+    assert.strictEqual(updated.status, 200);
+    assert.deepStrictEqual(updated.body.aplicabilidade_job, [3, 10]);
+    assert.strictEqual(aiCache.get('consolidated_prompt'), null);
+
+    const persisted = await pool.query(
+      'SELECT codigo, version, status, ativo, texto_orientacao, aplicabilidade_job FROM "JobsIA_validation_rules" WHERE id = $1',
+      [ruleId]
+    );
+    assert.deepStrictEqual(persisted.rows[0], {
+      ...beforeUpdate.rows[0],
+      aplicabilidade_job: [3, 10],
+    });
+
+    const audit = await pool.query(
+      `SELECT details FROM "JobsIA_audit_logs"
+       WHERE user_id = $1 AND action = 'UPDATE_NORM_APPLICABILITY'
+       ORDER BY created_at DESC LIMIT 1`,
+      [adminUser.id]
+    );
+    assert.strictEqual(audit.rows.length, 1);
+    assert.strictEqual(audit.rows[0].details.id, ruleId);
+    assert.deepStrictEqual(audit.rows[0].details.aplicabilidade_job, [3, 10]);
+
+    const allJobTypes = await request(app)
+      .put(`/api/norms/${ruleId}/applicability`)
+      .set('Authorization', `Bearer ${adminUser.token}`)
+      .send({ aplicabilidade_job: null });
+    assert.strictEqual(allJobTypes.status, 200);
+    assert.strictEqual(allJobTypes.body.aplicabilidade_job, null);
+  } finally {
+    await pool.query('DELETE FROM "JobsIA_validation_rules" WHERE id = $1', [ruleId]);
+  }
 });
 
 // ===========================================================================

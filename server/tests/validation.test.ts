@@ -152,6 +152,62 @@ test('Motor de Validação - Nomenclatura Unix Inválida (5.1.1 - Sem prefixo co
   assert.ok(prefixError);
 });
 
+test('Motor de Validação - Application não é usada como nome de arquivo', async () => {
+  const result = await validationEngine.validateChecklist(testJobTypeId, {
+    ambiente: 'Unix',
+    Application: 'DIT.TRH.DIARIO',
+    numero_registro: '1234',
+  }, testUserId, false);
+
+  assert.ok(result.errors.some(error => error.ruleCode === 'PARAM-REQUIRED-FILE_NAME'));
+  assert.ok(!result.errors.some(error => error.ruleCode === 'RULE-UNIX-PREFIX'));
+  assert.ok(!result.errors.some(error => error.ruleCode === 'RULE-UNIX-UPPER-MAX'));
+});
+
+test('Checklist Application - Tipos 3 e 10 não validam Application como file_name', async () => {
+  const result = await validationEngine.validateApplicationChecklist({
+    request_id: 'validation-no-file-name-for-transhost',
+    schema_version: 2,
+    application: {
+      name: 'DIT.TRH.DIARIO',
+      responsible_name: 'Val Tester',
+      server_mode: 'shared',
+      shared_server: 'UXRJO001',
+    },
+    jobs: [
+      {
+        sequence: 1,
+        job_type_id: 3,
+        generic: { name: 'Hadoop' },
+        bridge: { name: 'PONTE-DIOT-01' },
+        server: 'UXRJO001',
+        parameters: {
+          Application: 'DIT.TRH.DIARIO',
+          'Data de Processamento': '20260805',
+        },
+        capador: { applicable: false },
+      },
+      {
+        sequence: 2,
+        job_type_id: 10,
+        generic: { name: 'DataFlux' },
+        bridge: { name: 'PONTE-DIOT-02' },
+        parameters: {
+          Application: 'DIT.TRH.DIARIO',
+          'Operação (GET/PUT)': 'GET',
+          'Servidor de Origem': 'UXRJO001',
+          'Servidor de Destino': 'UXRSP002',
+          'Data de Processamento': '20260805',
+        },
+        capador: { applicable: false },
+      },
+    ],
+  }, testUserId, false);
+
+  assert.ok(!result.errors.some(error => error.ruleCode === 'RULE-UNIX-PREFIX'));
+  assert.ok(!result.errors.some(error => error.field.endsWith('.parameters.file_name')));
+});
+
 test('Motor de Validação - Nomenclatura Unix Inválida (5.1.1 - Tamanho > 36)', async () => {
   const result = await validationEngine.validateChecklist(testJobTypeId, {
     ambiente: 'Unix',
