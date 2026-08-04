@@ -612,10 +612,11 @@ export function NormsView() {
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[760px]">
+            <table className="w-full text-left border-collapse min-w-[920px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="p-4 font-semibold text-slate-700 w-44">Ambiente</th>
+                  <th className="p-4 font-semibold text-slate-700 w-52">Código / Prefixo</th>
                   <th className="p-4 font-semibold text-slate-700">Regra de Validação</th>
                   <th className="p-4 font-semibold text-slate-700 w-72">Aplicabilidade</th>
                   <th className="p-4 font-semibold text-slate-700 w-28 text-right">Ações</th>
@@ -628,6 +629,15 @@ export function NormsView() {
                     className={`hover:bg-slate-50 transition-colors group ${editingId === rule.id ? 'bg-emerald-50/30' : ''}`}
                   >
                     <td className="p-4 font-medium text-slate-800">{rule.environment}</td>
+                    <td className="p-4">
+                      {rule.codigo ? (
+                        <code className="inline-flex max-w-full rounded-md border border-violet-200 bg-violet-50 px-2 py-1 font-mono text-xs font-semibold text-violet-800">
+                          <span className="truncate" title={rule.codigo}>{rule.codigo}</span>
+                        </code>
+                      ) : (
+                        <span className="text-sm text-slate-400">Não informado</span>
+                      )}
+                    </td>
                     <td className="p-4 text-slate-600 text-sm">{rule.rule}</td>
                     <td className="p-4">
                       <span
