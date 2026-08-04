@@ -457,6 +457,12 @@ export function JobsView() {
     setFormData({ id: '', name: '', script: '', description: '', parameters: [] });
   };
 
+  const closeForm = () => {
+    setEditingId(null);
+    setIsAdding(false);
+    resetForm();
+  };
+
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.id.trim()) return;
@@ -574,9 +580,13 @@ export function JobsView() {
         {isAdmin && (
           <button
             onClick={() => {
-              setIsAdding(!isAdding);
-              setEditingId(null);
-              resetForm();
+              if (isAdding) {
+                closeForm();
+              } else {
+                setIsAdding(true);
+                setEditingId(null);
+                resetForm();
+              }
             }}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
               isAdding
@@ -591,14 +601,36 @@ export function JobsView() {
       </div>
 
       {(isAdding || editingId !== null) && (
-        <form
-          onSubmit={handleSave}
-          className="bg-purple-50/50 p-6 rounded-xl border border-purple-100 shadow-inner animate-in slide-in-from-top-4 duration-300 space-y-4"
+        <div
+          className={editingId !== null ? 'fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/30 backdrop-blur-sm p-0 sm:p-6 animate-in fade-in duration-200' : undefined}
+          role={editingId !== null ? 'dialog' : undefined}
+          aria-modal={editingId !== null || undefined}
+          aria-labelledby={editingId !== null ? 'job-editor-title' : undefined}
         >
-          <h3 className="text-purple-800 font-bold flex items-center gap-2">
-            {editingId !== null ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {editingId !== null ? `Editando Tipo ${editingId}` : 'Configurar Novo Tipo de Job'}
-          </h3>
+          <form
+            onSubmit={handleSave}
+            className={editingId !== null
+              ? 'w-full max-w-5xl h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-3rem)] overflow-y-auto bg-white p-4 sm:p-6 rounded-none sm:rounded-2xl border border-slate-200 shadow-2xl animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 space-y-5'
+              : 'bg-purple-50/50 p-6 rounded-xl border border-purple-100 shadow-inner animate-in slide-in-from-top-4 duration-300 space-y-4'
+            }
+          >
+            <div className={`flex items-center justify-between gap-4 ${editingId !== null ? 'pb-4 border-b border-slate-100' : ''}`}>
+              <h3 id={editingId !== null ? 'job-editor-title' : undefined} className={`font-bold flex items-center gap-2 ${editingId !== null ? 'text-slate-800 text-base sm:text-lg' : 'text-purple-800'}`}>
+                {editingId !== null ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                {editingId !== null ? `Editando Tipo ${editingId}` : 'Configurar Novo Tipo de Job'}
+              </h3>
+              {editingId !== null && (
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white/70 rounded-lg transition-colors"
+                  aria-label="Fechar edição"
+                  title="Fechar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-1.5">
@@ -812,23 +844,20 @@ export function JobsView() {
           <div className="flex gap-3 pt-2">
             <button
               type="submit"
-              className="flex-1 bg-purple-600 text-white font-semibold py-2.5 rounded-lg hover:bg-purple-700 transition-colors shadow-md shadow-purple-600/20"
+              className="flex-1 bg-blue-600 text-white font-semibold py-2.5 rounded-lg hover:bg-blue-700 transition-colors shadow-md shadow-blue-600/20"
             >
               {editingId !== null ? 'Salvar Alterações' : 'Criar Tipo de Job'}
             </button>
             <button
               type="button"
-              onClick={() => {
-                setEditingId(null);
-                setIsAdding(false);
-                resetForm();
-              }}
+              onClick={closeForm}
               className="px-6 bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg hover:bg-slate-300 transition-colors"
             >
               Cancelar
             </button>
           </div>
-        </form>
+          </form>
+        </div>
       )}
 
       {loading ? (
