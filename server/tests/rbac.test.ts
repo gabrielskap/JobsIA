@@ -225,6 +225,20 @@ test('Permissões - Deve permitir SOLICITANTE de ler normas (base de conheciment
   assert.strictEqual(res.status, 200);
 });
 
+test('Permissões - Catálogo oficial administrativo é restrito a ADMIN', async () => {
+  const forbidden = await request(app)
+    .get('/api/checklist-catalog/admin')
+    .set('Authorization', `Bearer ${operadorUser.token}`);
+  assert.strictEqual(forbidden.status, 403);
+  assert.strictEqual(forbidden.body.message, 'Acesso negado');
+
+  const allowed = await request(app)
+    .get('/api/checklist-catalog/admin')
+    .set('Authorization', `Bearer ${adminUser.token}`);
+  assert.strictEqual(allowed.status, 200);
+  assert.ok(Array.isArray(allowed.body));
+});
+
 test('Norm scope applicability is restricted to ADMIN and is audited', async () => {
   const created = await request(app)
     .post('/api/norms')

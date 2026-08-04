@@ -9,6 +9,7 @@ import { systemPromptService } from '../services/systemPromptService';
 import { checklistService } from '../services/checklistService';
 import { jobService } from '../services/jobService';
 import { buildCommand } from '../utils/commandBuilder';
+import { warningsForUserPresentation } from '../utils/validationPresentation';
 import type { JobTypeWithParameters } from '../types/database';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -505,7 +506,8 @@ export function AgentView() {
 
     const isSuccess = savedChecklist.status === 'Concluído';
     const hasErrors = savedChecklist.errors && savedChecklist.errors.length > 0;
-    const hasWarnings = savedChecklist.warnings && savedChecklist.warnings.length > 0;
+    const userVisibleWarnings = warningsForUserPresentation(savedChecklist.warnings);
+    const hasWarnings = userVisibleWarnings.length > 0;
     const command = savedChecklist.command || '';
 
     const fields = Object.entries(collected_data)
@@ -543,7 +545,7 @@ export function AgentView() {
               <span>Avisos de Validação (Revisão Recomendada)</span>
             </div>
             <div className="mt-2 space-y-1 max-h-40 overflow-y-auto pr-1">
-              {savedChecklist.warnings?.map((warn: any, i: number) => (
+              {userVisibleWarnings.map((warn: any, i: number) => (
                 <div key={i} className="text-xs bg-amber-100/50 p-2 rounded border border-amber-200">
                   <span className="font-semibold text-amber-800">[{warn.ruleCode}] {warn.field}:</span> {warn.message}
                 </div>
@@ -621,7 +623,10 @@ export function AgentView() {
 
     const isSuccess = savedChecklist.status === 'Concluído';
     const errors = savedChecklist.errors || [];
+    // Keep the complete warning list in the returned result for audit and
+    // technical handling, but hide catalog-configuration notices from chat.
     const warnings = savedChecklist.warnings || [];
+    const userVisibleWarnings = warningsForUserPresentation(warnings);
     const jobCount = args.jobs?.length || 0;
 
     const resultNode = (
@@ -647,9 +652,9 @@ export function AgentView() {
           </div>
         )}
 
-        {warnings.length > 0 && (
+        {userVisibleWarnings.length > 0 && (
           <div className="space-y-1 bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 text-xs">
-            {warnings.map((warn: any, i: number) => (
+            {userVisibleWarnings.map((warn: any, i: number) => (
               <div key={i}><span className="font-semibold">[{warn.ruleCode || 'AVISO'}]</span> {warn.message || String(warn)}</div>
             ))}
           </div>
@@ -733,8 +738,10 @@ export function AgentView() {
               } else {
                 success = false;
                 const errorDetails = result?.errors?.map((e: any) => `- Campo "${e.field}": ${e.message} (Regra: ${e.ruleCode})`).join('\n') || '';
-                const warningDetails = result?.warnings?.map((w: any) => `- ${w.message || String(w)}`).join('\n') || '';
-                toolFeedback = `Falha na validação do checklist. Status: ${result?.status || 'Falha Validação'}.\nErros de validação:\n${errorDetails}\nAvisos e sugestões publicados:\n${warningDetails}\nPor favor, informe ao usuário sobre estes erros de validação e continue a conversa fazendo as perguntas necessárias para que ele corrija os valores inválidos. NÃO exiba mensagem de sucesso.`;
+                const userVisibleWarnings = warningsForUserPresentation(result?.warnings);
+                const warningDetails = userVisibleWarnings.map((w: any) => `- ${w.message || String(w)}`).join('\n');
+                const warningsSection = warningDetails ? `\nAvisos e sugestões publicados:\n${warningDetails}` : '';
+                toolFeedback = `Falha na validação do checklist. Status: ${result?.status || 'Falha Validação'}.\nErros de validação:\n${errorDetails}${warningsSection}\nPor favor, informe ao usuário sobre estes erros de validação e continue a conversa fazendo as perguntas necessárias para que ele corrija os valores inválidos. NÃO exiba mensagem de sucesso.`;
               }
             } catch (err: any) {
               console.error("Falha ao processar tool call:", err);

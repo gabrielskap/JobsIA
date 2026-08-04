@@ -17,6 +17,30 @@ function catalogKind(value: unknown): CatalogKind | undefined {
   return kind === 'GENERIC' || kind === 'BRIDGE' ? kind : undefined;
 }
 
+/**
+ * Runtime consumers only see active entries. Administrators need the complete
+ * list so that an inactive entry can be reviewed and reactivated safely.
+ */
+router.get('/admin', requireRole('ADMIN'), async (_req: AuthRequest, res) => {
+  try {
+    const { rows } = await pool.query(
+      [
+        'SELECT id, kind, code, name, description, official_version, metadata, active, created_at',
+        'FROM "JobsIA_checklist_catalog_items"',
+        'ORDER BY kind ASC, active DESC, code ASC',
+      ].join(' ')
+    );
+    res.json(rows);
+  } catch (error: any) {
+    if (error?.code === '42P01') {
+      res.status(503).json({ message: 'O catálogo oficial ainda não foi migrado neste ambiente.' });
+      return;
+    }
+    console.error('checklistCatalog.admin.get:', error);
+    res.status(500).json({ message: 'Erro ao buscar o catálogo oficial para administração.' });
+  }
+});
+
 router.get('/', async (req: AuthRequest, res) => {
   const requestedKind = req.query.kind;
   const kind = requestedKind === undefined ? undefined : catalogKind(requestedKind);

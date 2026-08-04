@@ -1,6 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pdfService } from '../services/pdfService';
+import path from 'node:path';
+import {
+  filterChecklistPdfWarnings,
+  loadChecklistPdfLogo,
+  pdfService,
+} from '../services/pdfService';
+
+test('PDF renderer embeds the institutional logo and safely falls back when it is unavailable', () => {
+  const logo = loadChecklistPdfLogo(
+    path.join(process.cwd(), 'public', 'Logo_dataprev_Preferencial-01.png'),
+  );
+  assert.ok(logo?.startsWith('data:image/png;base64,'));
+  assert.equal(
+    loadChecklistPdfLogo(path.join(process.cwd(), '__missing_pdf_logo__.png')),
+    undefined,
+  );
+
+  const buffer = pdfService.generateChecklistPDF({
+    status: 'Concluído',
+    user_name: 'Responsável pelo Checklist',
+  });
+  assert.ok(buffer.toString('binary').includes('/Subtype /Image'));
+});
+
+test('PDF renderer omits unpublished catalog warnings but retains operational warnings', () => {
+  const operationalWarning = {
+    ruleCode: 'SCHEDULE-WINDOW-WARNING',
+    field: 'schedule.window',
+    message: 'Fora da janela preferencial.',
+  };
+  const filtered = filterChecklistPdfWarnings([
+    { ruleCode: 'CATALOG-GENERIC-NOT-CONFIGURED', message: 'Catálogo pendente.' },
+    { code: 'CATALOG-BRIDGE-NOT-CONFIGURED', message: 'Catálogo pendente.' },
+    operationalWarning,
+  ]);
+
+  assert.deepEqual(filtered, [operationalWarning]);
+});
 
 test('PDF renderer supports a structured Application checklist with multiple jobs', () => {
   const buffer = pdfService.generateChecklistPDF({

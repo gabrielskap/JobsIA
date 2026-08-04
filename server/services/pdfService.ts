@@ -2,15 +2,39 @@ import { jsPDF } from 'jspdf';
 import fs from 'fs';
 import path from 'path';
 
-let logoBase64 = '';
-try {
-  const logoPath = path.join(process.cwd(), 'public/Logo_dataprev_Preferencial-01.png');
-  if (fs.existsSync(logoPath)) {
-    logoBase64 = fs.readFileSync(logoPath).toString('base64');
-  }
-} catch (error) {
-  console.error('Erro ao carregar a logo do PDF:', error);
+const PDF_LOGO_FILE_NAME = 'Logo_dataprev_Preferencial-01.png';
+const PDF_LOGO_DATA_URI_PREFIX = 'data:image/png;base64,';
+
+function findPdfLogoPath(): string | undefined {
+  // Keep this ESM-safe. `process.cwd()` works in development and the launcher
+  // location covers a compiled dist-server process started from another path.
+  const launchDirectory = process.argv[1] ? path.dirname(path.resolve(process.argv[1])) : undefined;
+  const projectRoots = [
+    process.cwd(),
+    launchDirectory ? path.resolve(launchDirectory, '..') : undefined,
+    launchDirectory ? path.resolve(launchDirectory, '..', '..') : undefined,
+  ].filter((root): root is string => Boolean(root));
+  const candidates = [...new Set(projectRoots.map(root => path.join(root, 'public', PDF_LOGO_FILE_NAME)))];
+  return candidates.find(candidate => fs.existsSync(candidate));
 }
+
+/**
+ * Loads the institutional DATAPREV logo without making PDF generation depend
+ * on it. When a deployment omits the static asset, the caller can render the
+ * textual brand fallback instead.
+ */
+export function loadChecklistPdfLogo(assetPath = findPdfLogoPath()): string | undefined {
+  if (!assetPath) return undefined;
+
+  try {
+    const image = fs.readFileSync(assetPath);
+    return image.length > 0 ? `${PDF_LOGO_DATA_URI_PREFIX}${image.toString('base64')}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const logoDataUri = loadChecklistPdfLogo();
 
 export type PDFValue = string | number | boolean | Date | null | undefined | PDFValue[] | { [key: string]: unknown };
 
@@ -129,6 +153,20 @@ interface ValidationResult {
   code?: string;
   field?: string;
   message?: string;
+}
+
+const UNCONFIGURED_CATALOG_WARNING = /^CATALOG-[A-Z0-9_-]+-NOT-CONFIGURED$/i;
+
+/**
+ * Catalogues not published yet are informational at checklist creation time.
+ * They should not be repeated in the PDF alert section, but every other
+ * warning must remain visible for the operational team.
+ */
+export function filterChecklistPdfWarnings(warnings: ValidationResult[] = []): ValidationResult[] {
+  return warnings.filter(warning => {
+    const ruleCode = warning.ruleCode || warning.code || '';
+    return !UNCONFIGURED_CATALOG_WARNING.test(ruleCode);
+  });
 }
 
 export const TEMPLATE_VERSION = '2.1.0';
@@ -541,7 +579,7 @@ export const pdfService = {
     ]);
 
     const errors = payload.errors ?? [];
-    const warnings = payload.warnings ?? [];
+    const warnings = filterChecklistPdfWarnings(payload.warnings ?? []);
     if (!statusIsPassed(payload.status) || errors.length > 0 || warnings.length > 0) {
       drawSectionHeader('Resultados da Validação da Norma N/PD/004/02');
       checkSpace(12);
@@ -588,15 +626,28 @@ export const pdfService = {
     const dateStr = payload.created_at
       ? new Date(payload.created_at).toLocaleString('pt-BR')
       : new Date().toLocaleString('pt-BR');
+    const headerLogoSize = 27;
+    const headerTitleX = margin + headerLogoSize + 3;
 
     for (let page = 1; page <= totalPages; page += 1) {
       doc.setPage(page);
       doc.setFillColor(29, 78, 216);
       doc.rect(0, 0, pageW, 3, 'F');
 
-      if (logoBase64) {
-        doc.addImage(`data:image/png;base64,${logoBase64}`, 'PNG', margin, 4, 48, 24);
-      } else {
+      let logoDrawn = false;
+      if (logoDataUri) {
+        try {
+          // The supplied institutional asset is square. Keep it square so the
+          // brand mark is never stretched in the document header.
+          doc.addImage(logoDataUri, 'PNG', margin, 3.5, headerLogoSize, headerLogoSize);
+          logoDrawn = true;
+        } catch {
+          // An invalid optional asset must not prevent a checklist download.
+          logoDrawn = false;
+        }
+      }
+
+      if (!logoDrawn) {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);
         doc.setTextColor(30, 41, 59);
@@ -606,6 +657,16 @@ export const pdfService = {
         doc.setTextColor(100, 116, 139);
         doc.text(normalizePdfText('Tecnologia e Informação para a Previdência'), margin, 16);
       }
+
+      const effectiveHeaderTitleX = logoDrawn ? headerTitleX : margin + 55;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59);
+      doc.text('CHECKLIST DE EXECUCAO DE JOBS', effectiveHeaderTitleX, 13);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Documento operacional', effectiveHeaderTitleX, 18);
 
       if (hasValue(payload.rqs_rdm)) {
         doc.setFont('helvetica', 'bold');
