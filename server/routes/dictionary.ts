@@ -6,6 +6,12 @@ import { aiCache } from '../routes/ai';
 const router = Router();
 router.use(requireAuth);
 
+function requiredText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+
 router.get('/', async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -19,7 +25,13 @@ router.get('/', async (_req, res) => {
 });
 
 router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
-  const { term, definition, category } = req.body;
+  const term = requiredText(req.body?.term);
+  const definition = requiredText(req.body?.definition);
+  const category = requiredText(req.body?.category);
+  if (!term || !definition || !category) {
+    res.status(400).json({ message: 'term, definition e category são obrigatórios.' });
+    return;
+  }
   try {
     const { rows } = await pool.query(
       `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category, status, version) 
@@ -36,7 +48,17 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
 
 router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   const { id } = req.params;
-  const { term, definition, category } = req.body;
+  const term = req.body?.term === undefined ? undefined : requiredText(req.body.term);
+  const definition = req.body?.definition === undefined ? undefined : requiredText(req.body.definition);
+  const category = req.body?.category === undefined ? undefined : requiredText(req.body.category);
+  const hasInvalidField =
+    (req.body?.term !== undefined && !term)
+    || (req.body?.definition !== undefined && !definition)
+    || (req.body?.category !== undefined && !category);
+  if (hasInvalidField || (term === undefined && definition === undefined && category === undefined)) {
+    res.status(400).json({ message: 'Informe ao menos um campo válido para atualização.' });
+    return;
+  }
   try {
     const { rows: current } = await pool.query('SELECT * FROM "JobsIA_dictionary_terms" WHERE id = $1', [id]);
     if (current.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
@@ -79,7 +101,11 @@ router.post('/:id/publish', requireRole('ADMIN'), async (req: AuthRequest, res) 
   try {
     await client.query('BEGIN');
     const { rows: term } = await client.query('SELECT * FROM "JobsIA_dictionary_terms" WHERE id = $1', [id]);
-    if (term.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
+    if (term.length === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ message: 'Termo não encontrado' });
+      return;
+    }
 
     if (term[0].previous_version_id) {
       await client.query(
@@ -114,10 +140,15 @@ router.post('/:id/rollback', requireRole('ADMIN'), async (req: AuthRequest, res)
   try {
     await client.query('BEGIN');
     const { rows: current } = await client.query('SELECT * FROM "JobsIA_dictionary_terms" WHERE id = $1', [id]);
-    if (current.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
+    if (current.length === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ message: 'Termo não encontrado' });
+      return;
+    }
 
     const prevId = current[0].previous_version_id;
     if (!prevId) {
+      await client.query('ROLLBACK');
       res.status(400).json({ message: 'Não existe versão anterior para fazer rollback' });
       return;
     }

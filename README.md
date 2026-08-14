@@ -158,6 +158,30 @@ Para manter o fluxo de segurança robusto, a criação de contas pela rota `/sig
 
 ## 🔍 Troubleshooting e Healthchecks
 
+## ✅ Testes, cobertura e banco isolado
+
+O gate rápido executa todos os testes que não dependem de um PostgreSQL real:
+
+```bash
+npm test
+npm run test:coverage
+```
+
+O relatório de cobertura usa `c8 --all`, inclui os arquivos TypeScript e TSX do
+backend e do frontend e bloqueia regressões abaixo do baseline atual. A suíte de
+integração nunca reutiliza `DATABASE_URL`; ela exige explicitamente uma conexão
+dedicada em `DATABASE_URL_TEST`:
+
+```bash
+DATABASE_URL_TEST=postgresql://test_user:test_password@localhost:5432/jobsia_test \
+  npm run test:integration
+```
+
+O workflow `.github/workflows/test.yml` provisiona PostgreSQL efêmero, valida o
+schema protegido, executa integração, cobertura, builds, TypeScript e bloqueia
+dependências com vulnerabilidade crítica. Testes de schema continuam destrutivos
+e só podem ser executados em banco cujo nome contenha marcador de teste.
+
 ### Healthcheck do Servidor
 O backend fornece um endpoint simples de monitoramento para validar se o serviço está ativo e respondendo adequadamente:
 - **URL**: `GET http://localhost:3001/api/health`
