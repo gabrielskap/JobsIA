@@ -52,7 +52,7 @@ test('Fluxo de Publicação e Integração com Prompt do Agente', async () => {
     .send({ environment: 'Geral', rule: 'Regra de teste de integração para IA' });
   
   assert.strictEqual(normRes.status, 201);
-  assert.strictEqual(normRes.body.status, 'RASCUNHO');
+  assert.strictEqual(normRes.body.status, 'PUBLICADO');
   const normId = normRes.body.id;
 
   // 2. Tentar publicar diretamente pelo OPERADOR deve dar 403

@@ -101,7 +101,7 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
     const { rows } = await pool.query(
       `INSERT INTO "JobsIA_validation_rules" 
        (ambiente, texto_orientacao, status, version, secao, codigo, campo_alvo, tipo_regra, severidade, mensagem, expressao, aplicabilidade_job, casos_teste) 
-       VALUES ($1, $2, 'RASCUNHO', 1, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *, ambiente AS environment, texto_orientacao AS rule`,
+       VALUES ($1, $2, 'PUBLICADO', 1, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *, ambiente AS environment, texto_orientacao AS rule`,
       [
         mappedEnv,
         rule || mensagem || '',
@@ -117,6 +117,7 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
       ]
     );
     await logAudit(req.userId, 'CREATE_NORM', { id: rows[0].id, environment, rule }, req.ip);
+    if (aiCache) aiCache.clear();
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('norms.create:', err);
@@ -133,10 +134,13 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
     
     const nextVersion = current[0].version + 1;
     const mappedEnv = environment ? sanitizeEnvironment(environment) : current[0].ambiente;
+    if (current[0].ativo) {
+      await pool.query('UPDATE "JobsIA_validation_rules" SET ativo = false WHERE id = $1', [id]);
+    }
     const { rows } = await pool.query(
       `INSERT INTO "JobsIA_validation_rules" 
-       (ambiente, texto_orientacao, status, version, previous_version_id, secao, codigo, campo_alvo, tipo_regra, severidade, mensagem, expressao, aplicabilidade_job, casos_teste)
-       VALUES ($1, $2, 'RASCUNHO', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *, ambiente AS environment, texto_orientacao AS rule`,
+       (ambiente, texto_orientacao, status, version, previous_version_id, secao, codigo, campo_alvo, tipo_regra, severidade, mensagem, expressao, aplicabilidade_job, casos_teste, ativo)
+       VALUES ($1, $2, 'PUBLICADO', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true) RETURNING *, ambiente AS environment, texto_orientacao AS rule`,
       [
         mappedEnv,
         rule || current[0].texto_orientacao,
@@ -153,7 +157,8 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
         casos_teste !== undefined ? (casos_teste ? JSON.stringify(casos_teste) : null) : (current[0].casos_teste ? JSON.stringify(current[0].casos_teste) : null)
       ]
     );
-    await logAudit(req.userId, 'UPDATE_NORM_DRAFT', { id, new_draft_id: rows[0].id, version: nextVersion }, req.ip);
+    await logAudit(req.userId, 'UPDATE_NORM', { id, new_id: rows[0].id, version: nextVersion }, req.ip);
+    if (aiCache) aiCache.clear();
     res.json(rows[0]);
   } catch (err) {
     console.error('norms.update:', err);

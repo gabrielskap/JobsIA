@@ -35,10 +35,11 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     const { rows } = await pool.query(
       `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category, status, version) 
-       VALUES ($1, $2, $3, 'RASCUNHO', 1) RETURNING *`,
+       VALUES ($1, $2, $3, 'PUBLICADO', 1) RETURNING *`,
       [term, definition, category]
     );
     await logAudit(req.userId, 'CREATE_DICT_TERM', { id: rows[0].id, term, definition, category }, req.ip);
+    if (aiCache) aiCache.clear();
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('dictionary.create:', err);
@@ -64,12 +65,16 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
     if (current.length === 0) { res.status(404).json({ message: 'Termo não encontrado' }); return; }
 
     const nextVersion = current[0].version + 1;
+    if (current[0].active) {
+      await pool.query('UPDATE "JobsIA_dictionary_terms" SET active = false WHERE id = $1', [id]);
+    }
     const { rows } = await pool.query(
-      `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category, status, version, previous_version_id)
-       VALUES ($1, $2, $3, 'RASCUNHO', $4, $5) RETURNING *`,
+      `INSERT INTO "JobsIA_dictionary_terms" (term, definition, category, status, version, previous_version_id, active)
+       VALUES ($1, $2, $3, 'PUBLICADO', $4, $5, true) RETURNING *`,
       [term || current[0].term, definition || current[0].definition, category || current[0].category, nextVersion, id]
     );
-    await logAudit(req.userId, 'UPDATE_DICT_TERM_DRAFT', { id, new_draft_id: rows[0].id, version: nextVersion }, req.ip);
+    await logAudit(req.userId, 'UPDATE_DICT_TERM', { id, new_id: rows[0].id, version: nextVersion }, req.ip);
+    if (aiCache) aiCache.clear();
     res.json(rows[0]);
   } catch (err) {
     console.error('dictionary.update:', err);
