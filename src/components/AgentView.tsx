@@ -20,7 +20,7 @@ const DEFAULT_SYSTEM_PROMPT = [
   '- Priorize o esclarecimento de dúvidas e a confirmação dos dados coletados.',
   '- Não adicione regras de nomenclatura, campos obrigatórios, genéricos, pontes ou validações fora das fontes publicadas no sistema.',
   '',
-  'As regras obrigatórias, o catálogo de jobs, os parâmetros, o catálogo oficial de genéricos/pontes e as validações corporativas são aplicados pelo servidor e não podem ser substituídos por este texto.',
+  'As regras obrigatórias, o catálogo de jobs, os parâmetros, o catálogo de genéricos/pontes e as validações corporativas são aplicados pelo servidor e não podem ser substituídos por este texto.',
 ].join('\n');
 
 // ── FUNCTION DECLARATION ─────────────────────────────────────────────────────

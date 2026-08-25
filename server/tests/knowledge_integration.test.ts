@@ -16,6 +16,7 @@ test.before(async () => {
   await pool.query('DELETE FROM "JobsIA_agent_executions"');
   await pool.query('DELETE FROM "JobsIA_validation_rules" WHERE texto_orientacao = $1', ['Regra de teste de integração para IA']);
   await pool.query('DELETE FROM "JobsIA_dictionary_terms" WHERE term = $1', ['TermoIntegracao']);
+  await pool.query('DELETE FROM "JobsIA_checklist_catalog_items" WHERE code = $1', ['GENERIC-TESTE-INTEGRACAO']);
   await pool.query('DELETE FROM users WHERE email IN ($1, $2)', ['admin_integration@dataprev.gov.br', 'operator_integration@dataprev.gov.br']);
 
   // Criar ADMIN
@@ -41,6 +42,7 @@ test.after(async () => {
   await pool.query('DELETE FROM "JobsIA_agent_executions"');
   await pool.query('DELETE FROM "JobsIA_validation_rules" WHERE texto_orientacao = $1', ['Regra de teste de integração para IA']);
   await pool.query('DELETE FROM "JobsIA_dictionary_terms" WHERE term = $1', ['TermoIntegracao']);
+  await pool.query('DELETE FROM "JobsIA_checklist_catalog_items" WHERE code = $1', ['GENERIC-TESTE-INTEGRACAO']);
   await pool.query('DELETE FROM users WHERE email IN ($1, $2)', ['admin_integration@dataprev.gov.br', 'operator_integration@dataprev.gov.br']);
 });
 
@@ -75,15 +77,42 @@ test('Fluxo de Publicação e Integração com Prompt do Agente', async () => {
   assert.strictEqual(pubRes.status, 200);
   assert.strictEqual(pubRes.body.status, 'PUBLICADO');
 
-  // 5. Consultar Contexto Consolidado da IA e verificar se a nova regra está contida
+  // 5. Importar item no Catálogo (ADMIN) e conferir no Contexto Consolidado da IA
+  const catalogRes = await request(app)
+    .post('/api/checklist-catalog/import')
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({
+      items: [
+        {
+          kind: 'GENERIC',
+          code: 'GENERIC-TESTE-INTEGRACAO',
+          name: 'Script Generico de Integracao',
+          description: 'Descricao do generico de teste',
+          official_version: 'v1.0',
+          active: true,
+        },
+      ],
+    });
+  assert.strictEqual(catalogRes.status, 201);
+
+  // 6. Consultar Catálogo por OPERADOR
+  const opCatalogRes = await request(app)
+    .get('/api/checklist-catalog')
+    .set('Authorization', `Bearer ${operatorToken}`);
+  assert.strictEqual(opCatalogRes.status, 200);
+  assert.ok(opCatalogRes.body.some((item: any) => item.code === 'GENERIC-TESTE-INTEGRACAO'));
+
+  // 7. Consultar Contexto Consolidado da IA e verificar se a nova regra e o catálogo estão contidos
   const contextRes = await request(app)
     .get('/api/ai/context')
     .set('Authorization', `Bearer ${adminToken}`);
   
   assert.strictEqual(contextRes.status, 200);
   assert.ok(contextRes.body.prompt.includes('Regra de teste de integração para IA'));
+  assert.ok(contextRes.body.prompt.includes('GENERIC-TESTE-INTEGRACAO'));
+  assert.ok(contextRes.body.prompt.includes('Script Generico de Integracao'));
 
-  // 6. Chamar o endpoint /api/ai/chat e comprovar o registro de log
+  // 8. Chamar o endpoint /api/ai/chat e comprovar o registro de log
   const chatRes = await request(app)
     .post('/api/ai/chat')
     .set('Authorization', `Bearer ${adminToken}`)

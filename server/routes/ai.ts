@@ -118,7 +118,7 @@ function buildJobsCatalog(types: JobTypeRow[], parameters: JobParameterRow[]): s
 
 function buildChecklistCatalog(items: ChecklistCatalogRow[]): string {
   if (items.length === 0) {
-    return '(Catálogo oficial ainda não publicado. Solicite a opção, registre-a no payload e explique que haverá conferência.)';
+    return '(Catálogo ainda não publicado. Solicite a opção, registre-a no payload e explique que haverá conferência.)';
   }
 
   return items.map(item => {
@@ -195,6 +195,13 @@ export async function buildConsolidatedPrompt(): Promise<{ prompt: string; promp
        WHERE active = true AND status = 'PUBLICADO'
        ORDER BY created_at ASC`
     ),
+    optionalPromptQuery(
+      `SELECT d.filename, c.page_number, c.chunk_text
+       FROM "JobsIA_catalog_chunks" c
+       JOIN "JobsIA_catalog_documents" d ON d.id = c.document_id
+       ORDER BY d.created_at DESC, c.chunk_index ASC
+       LIMIT 15`
+    ),
   ]);
 
   const activePrompt = promptResult.rows[0];
@@ -203,6 +210,10 @@ export async function buildConsolidatedPrompt(): Promise<{ prompt: string; promp
   const jobsCatalog = buildJobsCatalog(typesResult.rows, parametersResult.rows);
   const checklistCatalog = buildChecklistCatalog(catalogResult.rows);
   const applicationRulesCatalog = buildApplicationRulesCatalog(applicationRulesResult.rows);
+  const catalogDocsResult = catalogDocumentsResult?.rows || [];
+  const catalogDocumentsText = catalogDocsResult.length > 0
+    ? catalogDocsResult.map((c: any) => `[Doc: ${c.filename} | Pág. ${c.page_number}]:\n${c.chunk_text}`).join('\n\n')
+    : '(Nenhum documento complementar importado no catálogo.)';
   const normsVersion = normsResult.rows.map((norm) => `${norm.id}:${norm.version}`).join('|') || 'v1';
   const dictVersion = dictionaryResult.rows.map((term) => `${term.id}:${term.version}`).join('|') || 'v1';
   const normsText = normsResult.rows
@@ -224,9 +235,13 @@ ${adminOverlay}
 Este catálogo é obrigatório e prevalece sobre exemplos de conversa. Use os nomes dos parâmetros exatamente como aparecem aqui.
 ${jobsCatalog}
 
-## CATÁLOGO OFICIAL DE GENÉRICOS E PONTES
+## CATÁLOGO DE GENÉRICOS E PONTES
 Use exclusivamente opções publicadas abaixo. Quando o catálogo estiver vazio, não invente opções: registre a escolha do usuário para conferência.
 ${checklistCatalog}
+
+## DOCUMENTOS E ESPECIFICAÇÕES VETORIZADAS DO CATÁLOGO
+Utilize as especificações e instruções dos documentos técnicos importados no catálogo:
+${catalogDocumentsText}
 
 ## REGRAS PUBLICADAS PARA APPLICATION
 Application é o agrupador do Workload, nunca o Job ou arquivo. Valide somente com estas regras e ofereça sugestão apenas quando a regra trouxer um modelo de sugestão.

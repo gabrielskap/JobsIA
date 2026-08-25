@@ -247,20 +247,252 @@ router.post('/application-rules/import', requireRole('ADMIN'), async (req: AuthR
         ]
       );
     }
-    await client.query('COMMIT');
-    aiCache.clear();
-    await logAudit(req.userId, 'IMPORT_APPLICATION_VALIDATION_RULES', { count: rules.length }, req.ip);
-    res.status(201).json({ imported: rules.length });
-  } catch (error: any) {
-    await client.query('ROLLBACK');
-    if (error?.code === '42P01') {
-      res.status(503).json({ message: 'A migração de regras de Application ainda não foi aplicada neste ambiente.' });
+import multer from 'multer';
+import { extractTextFromPdfBuffer, chunkDocumentText } from '../services/pdfExtractor';
+import { generateEmbedding, cosineSimilarity, extractCatalogCandidatesFromText } from '../services/embeddingService';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos no formato PDF são permitidos.'));
+    }
+  },
+});
+
+/**
+ * Upload e vetorização de documento PDF no Catálogo.
+ */
+router.post('/upload-pdf', requireRole('ADMIN'), upload.single('file'), async (req: AuthRequest, res) => {
+  if (!req.file) {
+    res.status(400).json({ message: 'Nenhum arquivo PDF foi enviado.' });
+    return;
+  }
+
+  const filename = req.file.originalname;
+  const fileSize = req.file.size;
+
+  try {
+    // 1. Extração do texto e metadados do PDF
+    const { text, total_pages, info } = await extractTextFromPdfBuffer(req.file.buffer);
+
+    if (!text || text.trim().length === 0) {
+      res.status(422).json({ message: 'Não foi possível extrair texto legível do arquivo PDF informado.' });
       return;
     }
-    console.error('checklistCatalog.applicationRules.import:', error);
-    res.status(500).json({ message: 'Erro ao importar regras de Application.' });
-  } finally {
-    client.release();
+
+    // 2. Divisão em chunks semânticos com overlap
+    const rawChunks = chunkDocumentText(text, total_pages);
+    if (rawChunks.length === 0) {
+      res.status(422).json({ message: 'O conteúdo do PDF não produziu trechos válidos para vetorização.' });
+      return;
+    }
+
+    // 3. Geração de embeddings vetoriais para os chunks
+    const chunkEmbeddings = await Promise.all(
+      rawChunks.map(async (chunk) => {
+        const embedding = await generateEmbedding(chunk.text);
+        return {
+          ...chunk,
+          embedding,
+        };
+      })
+    );
+
+    // 4. Detecção de candidatos a itens do catálogo (Genéricos e Pontes)
+    const detectedCandidates = extractCatalogCandidatesFromText(text);
+
+    // 5. Persistência transacional do documento e chunks no PostgreSQL
+    const client = await pool.connect();
+    let documentId: string;
+
+    try {
+      await client.query('BEGIN');
+
+      const docSummary = text.slice(0, 300).replace(/\s+/g, ' ').trim() + (text.length > 300 ? '...' : '');
+      const docRes = await client.query(
+        `INSERT INTO "JobsIA_catalog_documents"
+         (filename, file_size, total_pages, extracted_text, summary, status, metadata, created_by)
+         VALUES ($1, $2, $3, $4, $5, 'VETORIZADO', $6::jsonb, $7)
+         RETURNING id, filename, file_size, total_pages, summary, status, created_at`,
+        [
+          filename,
+          fileSize,
+          total_pages,
+          text,
+          docSummary,
+          JSON.stringify({ info, chunks_count: chunkEmbeddings.length, detected_candidates: detectedCandidates.length }),
+          req.userId || null,
+        ]
+      );
+      documentId = docRes.rows[0].id;
+
+      for (const chunk of chunkEmbeddings) {
+        await client.query(
+          `INSERT INTO "JobsIA_catalog_chunks"
+           (document_id, chunk_index, page_number, chunk_text, embedding, token_count)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+          [
+            documentId,
+            chunk.chunkIndex,
+            chunk.pageNumber,
+            chunk.text,
+            JSON.stringify(chunk.embedding),
+            chunk.tokenCount,
+          ]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    aiCache.clear();
+    await logAudit(req.userId, 'UPLOAD_CATALOG_PDF', { filename, documentId, chunksCount: chunkEmbeddings.length }, req.ip);
+
+    res.status(201).json({
+      message: 'PDF importado e vetorizado com sucesso.',
+      document: {
+        id: documentId,
+        filename,
+        file_size: fileSize,
+        total_pages,
+        chunks_count: chunkEmbeddings.length,
+        summary: text.slice(0, 300),
+      },
+      detected_candidates: detectedCandidates,
+    });
+  } catch (error: any) {
+    if (error?.code === '42P01') {
+      res.status(503).json({ message: 'A migração de documentos do catálogo ainda não foi aplicada neste ambiente.' });
+      return;
+    }
+    console.error('checklistCatalog.uploadPdf:', error);
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao processar e vetorizar o PDF.' });
+  }
+});
+
+/**
+ * Listagem dos documentos PDF importados no catálogo.
+ */
+router.get('/documents', async (_req: AuthRequest, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT d.id, d.filename, d.file_size, d.total_pages, d.summary, d.status, d.metadata, d.created_at,
+              COUNT(c.id)::int AS chunks_count
+       FROM "JobsIA_catalog_documents" d
+       LEFT JOIN "JobsIA_catalog_chunks" c ON c.document_id = d.id
+       GROUP BY d.id
+       ORDER BY d.created_at DESC`
+    );
+    res.json(rows);
+  } catch (error: any) {
+    if (error?.code === '42P01') {
+      res.status(503).json({ message: 'A tabela de documentos do catálogo ainda não foi migrada.' });
+      return;
+    }
+    console.error('checklistCatalog.getDocuments:', error);
+    res.status(500).json({ message: 'Erro ao listar documentos do catálogo.' });
+  }
+});
+
+/**
+ * Listagem dos chunks vetorizados de um documento específico.
+ */
+router.get('/documents/:id/chunks', async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, document_id, chunk_index, page_number, chunk_text, token_count, created_at
+       FROM "JobsIA_catalog_chunks"
+       WHERE document_id = $1
+       ORDER BY chunk_index ASC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (error: any) {
+    console.error('checklistCatalog.getDocumentChunks:', error);
+    res.status(500).json({ message: 'Erro ao buscar trechos vetorizados do documento.' });
+  }
+});
+
+/**
+ * Exclusão de documento PDF e seus chunks vetorizados.
+ */
+router.delete('/documents/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM "JobsIA_catalog_documents" WHERE id = $1 RETURNING id, filename', [id]);
+    if (result.rowCount === 0) {
+      res.status(404).json({ message: 'Documento não encontrado.' });
+      return;
+    }
+    aiCache.clear();
+    await logAudit(req.userId, 'DELETE_CATALOG_DOCUMENT', { id, filename: result.rows[0].filename }, req.ip);
+    res.json({ message: 'Documento e vetores excluídos com sucesso.', id });
+  } catch (error: any) {
+    console.error('checklistCatalog.deleteDocument:', error);
+    res.status(500).json({ message: 'Erro ao excluir documento do catálogo.' });
+  }
+});
+
+/**
+ * Busca semântica nos chunks vetorizados do catálogo.
+ */
+router.post('/search-semantic', async (req: AuthRequest, res) => {
+  const query = stringValue(req.body?.query);
+  const limit = Math.min(Math.max(1, Number(req.body?.limit) || 5), 20);
+
+  if (!query) {
+    res.status(400).json({ message: 'Informe o termo de consulta para busca semântica.' });
+    return;
+  }
+
+  try {
+    const queryEmbedding = await generateEmbedding(query);
+
+    const { rows: chunks } = await pool.query(
+      `SELECT c.id, c.document_id, c.chunk_index, c.page_number, c.chunk_text, c.embedding,
+              d.filename
+       FROM "JobsIA_catalog_chunks" c
+       JOIN "JobsIA_catalog_documents" d ON d.id = c.document_id
+       ORDER BY c.created_at DESC
+       LIMIT 200`
+    );
+
+    const scored = chunks.map((chunk) => {
+      let embeddingArr: number[] = [];
+      if (Array.isArray(chunk.embedding)) {
+        embeddingArr = chunk.embedding;
+      } else if (typeof chunk.embedding === 'string') {
+        try { embeddingArr = JSON.parse(chunk.embedding); } catch { embeddingArr = []; }
+      }
+      const score = cosineSimilarity(queryEmbedding, embeddingArr);
+      return {
+        id: chunk.id,
+        document_id: chunk.document_id,
+        filename: chunk.filename,
+        page_number: chunk.page_number,
+        chunk_index: chunk.chunk_index,
+        chunk_text: chunk.chunk_text,
+        similarity: Number(score.toFixed(4)),
+      };
+    });
+
+    scored.sort((a, b) => b.similarity - a.similarity);
+    const topResults = scored.slice(0, limit);
+
+    res.json({ query, results: topResults });
+  } catch (error: any) {
+    console.error('checklistCatalog.searchSemantic:', error);
+    res.status(500).json({ message: 'Erro ao executar busca semântica no catálogo.' });
   }
 });
 

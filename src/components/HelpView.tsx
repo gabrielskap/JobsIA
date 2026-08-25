@@ -30,10 +30,10 @@ const setupOrder = [
   },
   {
     step: '2',
-    title: 'Atualize o catálogo oficial',
+    title: 'Atualize o catálogo',
     description: 'Mantenha os genéricos e as pontes aprovados pela DIOT.',
     to: '/catalogo-oficial',
-    label: 'Catálogo Oficial',
+    label: 'Catálogo',
     icon: Database,
     color: 'border-cyan-100 bg-cyan-50 text-cyan-800 hover:border-cyan-300',
   },
@@ -205,18 +205,18 @@ export function HelpView() {
         <SectionHeader
           icon={Database}
           step="Etapa 2"
-          title="Como manter o Catálogo Oficial"
-          description="Genéricos e pontes são opções oficiais usadas nos checklists. Eles são diferentes dos tipos de job e de seus parâmetros."
+          title="Como manter o Catálogo"
+          description="Genéricos e pontes são opções usadas nos checklists. Eles são diferentes dos tipos de job e de seus parâmetros."
           iconClass="bg-cyan-50 text-cyan-700"
         />
         <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-cyan-100 bg-cyan-50/40 p-5 sm:p-6">
             <h4 className="font-bold text-slate-800">Cadastro e manutenção</h4>
             <ol className="mt-4 space-y-4">
-              <Step number={1}>Acesse <Link className="font-semibold text-cyan-700 underline underline-offset-2" to="/catalogo-oficial">Catálogo Oficial</Link> e use <strong>Novo item</strong>.</Step>
-              <Step number={2}>Escolha se o item é um <strong>Genérico</strong> ou uma <strong>Ponte</strong>; informe o código, o nome oficial, a descrição e a versão da fonte.</Step>
+              <Step number={1}>Acesse <Link className="font-semibold text-cyan-700 underline underline-offset-2" to="/catalogo-oficial">Catálogo</Link> e use <strong>Novo item</strong>.</Step>
+              <Step number={2}>Escolha se o item é um <strong>Genérico</strong> ou uma <strong>Ponte</strong>; informe o código, o nome, a descrição e a versão da fonte.</Step>
               <Step number={3}>Mantenha o item <strong>Ativo</strong> somente quando ele estiver aprovado para uso. Apenas itens ativos são aceitos na validação de novos checklists.</Step>
-              <Step number={4}>Para cargas maiores, use <strong>Importar JSON</strong> com a relação oficial revisada. A importação atualiza cada combinação de tipo e código.</Step>
+              <Step number={4}>Para cargas maiores, use <strong>Importar JSON</strong> com a relação revisada. A importação atualiza cada combinação de tipo e código.</Step>
             </ol>
           </div>
           <div className="space-y-4">
@@ -226,7 +226,7 @@ export function HelpView() {
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm leading-relaxed text-amber-950">
               <p className="font-semibold">Fonte de verdade</p>
-              <p className="mt-1 text-amber-900/85">Não use o catálogo para inventar genéricos ou pontes. Registre apenas valores confirmados na fonte oficial DIOT e identifique a versão usada.</p>
+              <p className="mt-1 text-amber-900/85">Não use o catálogo para inventar genéricos ou pontes. Registre apenas valores confirmados na fonte DIOT e identifique a versão usada.</p>
             </div>
           </div>
         </div>
@@ -242,23 +242,22 @@ export function HelpView() {
         />
         <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-5 sm:p-6">
-            <h4 className="font-bold text-slate-800">Cadastro pela tela</h4>
+            <h4 className="font-bold text-slate-800">Fluxo editorial das regras</h4>
             <ol className="mt-4 space-y-4">
-              <Step number={1}>Acesse <Link className="font-semibold text-emerald-700 underline underline-offset-2" to="/normas">Norma N/PD/004/02</Link> e clique em <strong>Nova Regra</strong>.</Step>
-              <Step number={2}>Escolha o ambiente: <strong>Geral</strong>, <strong>UNIX / LINUX</strong> ou <strong>Windows</strong>.</Step>
-              <Step number={3}>Escreva uma orientação clara: informe o padrão, exceções permitidas e a correção esperada quando o valor não for válido.</Step>
-              <Step number={4}>Salve e encaminhe a regra ao fluxo administrativo de aprovação e publicação. O salvamento cria uma versão de trabalho; não ativa a regra de imediato.</Step>
+              <Step number={1}>Em <Link className="font-semibold text-emerald-700 underline underline-offset-2" to="/normas">Regras de Nomenclatura</Link>, selecione o ambiente correto para orientar o usuário.</Step>
+              <Step number={2}>Defina o <strong>Escopo por tipo de job</strong> para que regras de banco, shell script ou mainframe só atuem onde fizer sentido.</Step>
+              <Step number={3}>Salve a regra. Ela entra como <strong>Rascunho</strong> e fica isolada do agente de IA e das validações.</Step>
+              <Step number={4}>Quando aprovada, clique em <strong>Publicar</strong>. A versão ativa passa a compor o contexto do assistente e do validador.</Step>
             </ol>
           </div>
           <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 p-5 sm:p-6">
-              <div className="flex items-center gap-2"><SlidersHorizontal className="h-5 w-5 text-emerald-600" /><h4 className="font-bold text-slate-800">Aplicabilidade por tipo de job</h4></div>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">Depois que uma regra estiver publicada e ativa, use o ícone de controles na própria linha para escolher <strong>Todos os tipos de job</strong> ou <strong>Somente tipos selecionados</strong>. A segunda opção exige pelo menos um tipo já cadastrado no Mapeamento de Jobs.</p>
-              <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-500">A regra é avaliada conforme ambiente, vigência e aplicabilidade. Regras bloqueantes impedem a finalização quando falham; avisos registram a pendência sem bloquear.</p>
+            <div className="rounded-xl border border-slate-200 p-5 text-sm leading-relaxed text-slate-600">
+              <p className="font-semibold text-slate-800">Histórico e rollback</p>
+              <p className="mt-1">Toda publicação incrementa a versão da regra e guarda o snapshot. Se uma mudança causar impacto indevido, use o botão de rollback para voltar imediatamente à versão anterior.</p>
             </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm leading-relaxed text-amber-950">
-              <p className="font-semibold">Configuração técnica avançada</p>
-              <p className="mt-1 text-amber-900/85">Código, expressão de validação, severidade e casos de teste fazem parte da regra estruturada, mas ainda não são campos editáveis nesta tela. Para esse nível de alteração, use o processo administrativo/técnico responsável pela publicação.</p>
+            <div className="rounded-xl border border-slate-200 p-5 text-sm leading-relaxed text-slate-600">
+              <p className="font-semibold text-slate-800">Importação em lote</p>
+              <p className="mt-1">A tela aceita JSON com orientações, escopo e status. O validador rejeita regras com formato inconsistente antes de salvar no banco.</p>
             </div>
           </div>
         </div>
@@ -269,35 +268,27 @@ export function HelpView() {
           icon={BookOpen}
           step="Etapa 4"
           title="Como manter o Dicionário de Dados"
-          description="O dicionário ensina o vocabulário da operação ao agente. Ele contextualiza a conversa, mas não substitui uma regra de nomenclatura ou a configuração de um parâmetro."
+          description="O vocabulário da DIOT padroniza termos de negócio, abreviações de ambiente e siglas de sistemas para que a IA e os operadores usem a mesma linguagem."
           iconClass="bg-blue-50 text-blue-600"
         />
-        <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-5 sm:p-6">
-            <h4 className="font-bold text-slate-800">Passo a passo</h4>
+            <h4 className="font-bold text-slate-800">Publicação de termos</h4>
             <ol className="mt-4 space-y-4">
-              <Step number={1}>Abra <Link className="font-semibold text-blue-700 underline underline-offset-2" to="/dicionario">Dicionário de Dados</Link> e clique em <strong>Adicionar Termo</strong>.</Step>
-              <Step number={2}>Informe o termo exatamente como é usado pela operação e escolha a categoria mais adequada.</Step>
-              <Step number={3}>Escreva uma definição direta: explique o significado, o contexto de uso e, quando necessário, o que o termo não representa.</Step>
-              <Step number={4}>Salve, revise e encaminhe o termo ao fluxo administrativo de publicação. Somente a versão publicada e ativa é disponibilizada ao agente.</Step>
+              <Step number={1}>Abra <Link className="font-semibold text-blue-700 underline underline-offset-2" to="/dicionario">Dicionário de Dados</Link> e use <strong>Novo Termo</strong>.</Step>
+              <Step number={2}>Classifique a entrada como <strong>Conceito</strong>, <strong>Parâmetro</strong>, <strong>Ambiente</strong> ou <strong>Sistema</strong>.</Step>
+              <Step number={3}>Revise o rascunho e use <strong>Publicar</strong> para incorporar o termo ao vocabulário ativo.</Step>
+              <Step number={4}>Use <strong>Importar / Exportar JSON</strong> para sincronizar o dicionário entre ambientes com auditoria de versão.</Step>
             </ol>
           </div>
           <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 p-5">
-              <h4 className="font-bold text-slate-800">Categorias disponíveis</h4>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {['Conceito', 'Operação', 'Ferramenta', 'Job Genérico', 'Codificação', 'Servidor'].map((category) => (
-                  <span key={category} className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{category}</span>
-                ))}
-              </div>
+            <div className="rounded-xl border border-slate-200 p-5 text-sm leading-relaxed text-slate-600">
+              <p className="font-semibold text-slate-800">Impacto imediato</p>
+              <p className="mt-1">Termos publicados passam a ser usados pelo agente para tirar dúvidas conceituais e evitar termos ambíguos durante o preenchimento.</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
-              <p className="font-semibold text-slate-800">Boas práticas</p>
-              <ul className="mt-3 space-y-2">
-                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />Evite definições circulares ou siglas sem explicação.</li>
-                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />Use um conceito por termo e mantenha a nomenclatura consistente.</li>
-                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />Não registre senhas, chaves, tokens ou outros dados sigilosos.</li>
-              </ul>
+            <div className="rounded-xl border border-slate-200 p-5 text-sm leading-relaxed text-slate-600">
+              <p className="font-semibold text-slate-800">Segurança de versão</p>
+              <p className="mt-1">Cada termo tem seu próprio histórico. Um rollback restaura a definição anterior sem interferir nos demais termos cadastrados.</p>
             </div>
           </div>
         </div>
@@ -305,18 +296,18 @@ export function HelpView() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <SectionHeader
-          icon={Brain}
+          icon={SlidersHorizontal}
           step="Etapa 5"
-          title="Diretrizes e modelo de linguagem"
-          description="As instruções ajustam o tom e a orientação operacional complementar. Elas não substituem catálogo, campos obrigatórios ou validações corporativas aplicadas pelo servidor."
-          iconClass="bg-indigo-50 text-indigo-600"
+          title="Como ajustar Instruções de IA (Prompt)"
+          description="Personalize o tom e o comportamento do assistente sem comprometer a política imutável do sistema nem as regras publicadas."
+          iconClass="bg-indigo-50 text-indigo-700"
         />
         <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-5 sm:p-6">
-            <h4 className="font-bold text-slate-800">Onde alterar</h4>
+            <h4 className="font-bold text-slate-800">Diretrizes complementares</h4>
             <ol className="mt-4 space-y-4">
-              <Step number={1}>Abra <Link className="font-semibold text-indigo-700 underline underline-offset-2" to="/agente">Agente IA (Chat)</Link>.</Step>
-              <Step number={2}>Clique em <strong>Instruções</strong> (ícone de engrenagem) no cabeçalho do chat para abrir o painel <strong>Configurar Comportamento</strong>.</Step>
+              <Step number={1}>Acesse a área administrativa do Agente IA.</Step>
+              <Step number={2}>Abra <strong>Configuração do Assistente</strong> para visualizar o prompt ativo atual.</Step>
               <Step number={3}>Selecione o modelo de linguagem disponível e edite <strong>Instruções de IA (Prompt)</strong> com diretrizes complementares.</Step>
               <Step number={4}>Clique em <strong>Salvar Instruções</strong>. A nova orientação é usada nas próximas interações.</Step>
             </ol>
@@ -324,7 +315,7 @@ export function HelpView() {
           <div className="space-y-4">
             <div className="rounded-xl border border-slate-200 p-5">
               <div className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-indigo-600" /><h4 className="font-bold text-slate-800">O que continua protegido</h4></div>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">O agente recebe uma política operacional fixa, jobs e parâmetros ativos, catálogo oficial ativo, regras e dicionário publicados. As instruções administrativas complementam esse contexto, mas não podem autorizar a omissão de campos obrigatórios nem a invenção de jobs, parâmetros, genéricos ou pontes.</p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">O agente recebe uma política operacional fixa, jobs e parâmetros ativos, catálogo ativo, regras e dicionário publicados. As instruções administrativas complementam esse contexto, mas não podem autorizar a omissão de campos obrigatórios nem a invenção de jobs, parâmetros, genéricos ou pontes.</p>
             </div>
             <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-5 text-sm leading-relaxed text-emerald-950">
               <p className="font-semibold">Antes de liberar uma mudança</p>
@@ -339,7 +330,7 @@ export function HelpView() {
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-blue-200"><Cpu className="h-5 w-5" /><span className="text-xs font-bold uppercase tracking-[0.16em]">Como as configurações são usadas</span></div>
             <h3 className="mt-2 text-xl font-bold">O contexto do JobsIA é consolidado antes de cada conversa.</h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-300">O sistema combina política operacional, diretrizes complementares, jobs e parâmetros ativos, catálogo oficial ativo, regras publicadas e dicionário publicado. Na finalização, o motor também valida as regras aplicáveis ao ambiente e ao tipo de job.</p>
+            <p className="mt-2 text-sm leading-relaxed text-slate-300">O sistema combina política operacional, diretrizes complementares, jobs e parâmetros ativos, catálogo ativo, regras publicadas e dicionário publicado. Na finalização, o motor também valida as regras aplicáveis ao ambiente e ao tipo de job.</p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2 text-xs font-semibold">
             {['Catálogo', 'Regras', 'Dicionário', 'Validação'].map((item) => <span key={item} className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-blue-100">{item}</span>)}
