@@ -1,7 +1,7 @@
-import { createRequire } from 'module';
+// @ts-ignore
+import * as pdfParseImport from 'pdf-parse';
 
-const require = createRequire(import.meta.url);
-const pdfParseModule = require('pdf-parse');
+const pdfParseModule: any = (pdfParseImport as any)?.default || pdfParseImport;
 
 export interface ExtractedPdf {
   text: string;
