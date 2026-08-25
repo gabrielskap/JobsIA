@@ -64,7 +64,7 @@ export function ChecklistCatalogView() {
   const isAdmin = (profile?.role ?? user?.role)?.toUpperCase() === 'ADMIN';
   
   // Abas principais
-  const [activeTab, setActiveTab] = useState<'items' | 'documents' | 'semantic'>('items');
+  const [activeTab, setActiveTab] = useState<'documents' | 'semantic' | 'items'>('documents');
 
   // Estado dos Itens
   const [items, setItems] = useState<ChecklistCatalogItem[]>([]);
@@ -367,16 +367,6 @@ export function ChecklistCatalogView() {
       {/* Abas */}
       <div className="flex border-b border-slate-200 gap-1 sm:gap-2">
         <button
-          onClick={() => setActiveTab('items')}
-          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 ${
-            activeTab === 'items'
-              ? 'border-cyan-600 text-cyan-800 bg-cyan-50/50 rounded-t-lg'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Database className="w-4 h-4" /> Itens Cadastrados ({items.length})
-        </button>
-        <button
           onClick={() => setActiveTab('documents')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 ${
             activeTab === 'documents'
@@ -396,9 +386,179 @@ export function ChecklistCatalogView() {
         >
           <Sparkles className="w-4 h-4" /> Busca Semântica no Catálogo
         </button>
+        <button
+          onClick={() => setActiveTab('items')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'items'
+              ? 'border-cyan-600 text-cyan-800 bg-cyan-50/50 rounded-t-lg'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Database className="w-4 h-4" /> Itens Cadastrados ({items.length})
+        </button>
       </div>
 
-      {/* ABA 1: TABELA DE ITENS */}
+      {/* ABA 1: DOCUMENTOS PDF E VETORES */}
+      {activeTab === 'documents' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-800">Documentos PDF Indexados na Base Vetorial</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Os trechos destes arquivos alimentam a recuperação semântica de conhecimento do assistente de IA.</p>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => setIsPdfModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 shadow-sm"
+                >
+                  <FileUp className="w-3.5 h-3.5" /> Enviar Novo PDF
+                </button>
+              )}
+            </div>
+
+            {docsLoading ? (
+              <div className="flex items-center justify-center py-16 text-slate-500">
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Carregando documentos...
+              </div>
+            ) : documents.length === 0 ? (
+              <div className="py-14 px-6 text-center text-slate-500">
+                <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                <p className="font-medium text-slate-700">Nenhum documento PDF importado ainda.</p>
+                <p className="text-xs text-slate-400 mt-1">Importe arquivos de especificações técnicas para gerar vetores de busca semântica.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                    <tr>
+                      <th className="text-left p-4 font-semibold">Documento</th>
+                      <th className="text-left p-4 font-semibold">Páginas</th>
+                      <th className="text-left p-4 font-semibold">Trechos Vetorizados</th>
+                      <th className="text-left p-4 font-semibold">Tamanho</th>
+                      <th className="text-left p-4 font-semibold">Status</th>
+                      <th className="text-left p-4 font-semibold">Data</th>
+                      <th className="text-right p-4 font-semibold">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {documents.map(doc => (
+                      <tr key={doc.id} className="group hover:bg-slate-50/80">
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                            <div>
+                              <p className="font-semibold text-slate-800">{doc.filename}</p>
+                              {doc.summary && <p className="text-xs text-slate-500 max-w-sm line-clamp-1">{doc.summary}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 font-mono text-xs text-slate-600">{doc.total_pages} pág(s)</td>
+                        <td className="p-4">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            <Sparkles className="w-3 h-3" /> {doc.chunks_count} chunks
+                          </span>
+                        </td>
+                        <td className="p-4 text-xs text-slate-500 font-mono">{(doc.file_size / 1024).toFixed(1)} KB</td>
+                        <td className="p-4">
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
+                            {doc.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-xs text-slate-500">{new Date(doc.created_at).toLocaleDateString('pt-BR')}</td>
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => void handleInspectDocument(doc)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg mr-1"
+                            title="Visualizar trechos vetorizados"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => void handleDeleteDocument(doc)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Excluir documento e vetores"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABA 2: BUSCA SEMÂNTICA NO CATÁLOGO */}
+      {activeTab === 'semantic' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+            <form onSubmit={handleSemanticSearch} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-800 mb-1">
+                  Consulta Semântica Vetorial
+                </label>
+                <p className="text-xs text-slate-500 mb-3">
+                  Faça perguntas em linguagem natural ou busque conceitos. O sistema compara os vetores dos PDFs indexados e retorna os trechos com maior correspondência semântica.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    value={semanticQuery}
+                    onChange={e => setSemanticQuery(e.target.value)}
+                    placeholder="Ex.: Quais os requisitos para transferência de arquivos via ponte Connect:Direct?"
+                    className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                  />
+                  <button
+                    type="submit"
+                    disabled={semanticSearching || !semanticQuery.trim()}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-sm disabled:opacity-50"
+                  >
+                    {semanticSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    Buscar
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Resultados da busca */}
+            {semanticSearching && (
+              <div className="flex items-center justify-center py-12 text-slate-500">
+                <Loader2 className="w-5 h-5 mr-2 animate-spin text-indigo-600" /> Calculando similaridade vetorial nos documentos...
+              </div>
+            )}
+
+            {!semanticSearching && semanticResults.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  {semanticResults.length} Trechos Mais Relevantes Encontrados
+                </h4>
+                <div className="grid grid-cols-1 gap-3">
+                  {semanticResults.map((res, i) => (
+                    <div key={res.id || i} className="p-4 border border-indigo-100 rounded-xl bg-indigo-50/20 hover:bg-indigo-50/40 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700">
+                          <FileText className="w-3.5 h-3.5" /> {res.filename} (Pág. {res.page_number})
+                        </span>
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
+                          Similaridade: {(res.similarity * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-sans">{res.chunk_text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABA 3: TABELA DE ITENS CADASTRADOS */}
       {activeTab === 'items' && (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -511,166 +671,6 @@ export function ChecklistCatalogView() {
               </table>
             </div>
           )}
-        </div>
-      )}
-
-      {/* ABA 2: DOCUMENTOS PDF E VETORES */}
-      {activeTab === 'documents' && (
-        <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-slate-800">Documentos PDF Indexados na Base Vetorial</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Os trechos destes arquivos alimentam a recuperação semântica de conhecimento do assistente de IA.</p>
-              </div>
-              {isAdmin && (
-                <button
-                  onClick={() => setIsPdfModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 shadow-sm"
-                >
-                  <FileUp className="w-3.5 h-3.5" /> Enviar Novo PDF
-                </button>
-              )}
-            </div>
-
-            {docsLoading ? (
-              <div className="flex items-center justify-center py-16 text-slate-500">
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Carregando documentos...
-              </div>
-            ) : documents.length === 0 ? (
-              <div className="py-14 px-6 text-center text-slate-500">
-                <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                <p className="font-medium text-slate-700">Nenhum documento PDF importado ainda.</p>
-                <p className="text-xs text-slate-400 mt-1">Importe arquivos de especificações técnicas para gerar vetores de busca semântica.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                    <tr>
-                      <th className="text-left p-4 font-semibold">Documento</th>
-                      <th className="text-left p-4 font-semibold">Páginas</th>
-                      <th className="text-left p-4 font-semibold">Trechos Vetorizados</th>
-                      <th className="text-left p-4 font-semibold">Tamanho</th>
-                      <th className="text-left p-4 font-semibold">Status</th>
-                      <th className="text-left p-4 font-semibold">Data</th>
-                      <th className="text-right p-4 font-semibold">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {documents.map(doc => (
-                      <tr key={doc.id} className="group hover:bg-slate-50/80">
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
-                            <div>
-                              <p className="font-semibold text-slate-800">{doc.filename}</p>
-                              {doc.summary && <p className="text-xs text-slate-500 max-w-sm line-clamp-1">{doc.summary}</p>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-4 font-mono text-xs text-slate-600">{doc.total_pages} pág(s)</td>
-                        <td className="p-4">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                            <Sparkles className="w-3 h-3" /> {doc.chunks_count} chunks
-                          </span>
-                        </td>
-                        <td className="p-4 text-xs text-slate-500 font-mono">{(doc.file_size / 1024).toFixed(1)} KB</td>
-                        <td className="p-4">
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
-                            {doc.status}
-                          </span>
-                        </td>
-                        <td className="p-4 text-xs text-slate-500">{new Date(doc.created_at).toLocaleDateString('pt-BR')}</td>
-                        <td className="p-4 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => void handleInspectDocument(doc)}
-                            className="p-1.5 text-slate-400 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg mr-1"
-                            title="Visualizar trechos vetorizados"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          {isAdmin && (
-                            <button
-                              onClick={() => void handleDeleteDocument(doc)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                              title="Excluir documento e vetores"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ABA 3: BUSCA SEMÂNTICA NO CATÁLOGO */}
-      {activeTab === 'semantic' && (
-        <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-            <form onSubmit={handleSemanticSearch} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-800 mb-1">
-                  Consulta Semântica Vetorial
-                </label>
-                <p className="text-xs text-slate-500 mb-3">
-                  Faça perguntas em linguagem natural ou busque conceitos. O sistema compara os vetores dos PDFs indexados e retorna os trechos com maior correspondência semântica.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    value={semanticQuery}
-                    onChange={e => setSemanticQuery(e.target.value)}
-                    placeholder="Ex.: Quais os requisitos para transferência de arquivos via ponte Connect:Direct?"
-                    className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
-                  />
-                  <button
-                    type="submit"
-                    disabled={semanticSearching || !semanticQuery.trim()}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-sm disabled:opacity-50"
-                  >
-                    {semanticSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                    Buscar
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            {/* Resultados da busca */}
-            {semanticSearching && (
-              <div className="flex items-center justify-center py-12 text-slate-500">
-                <Loader2 className="w-5 h-5 mr-2 animate-spin text-indigo-600" /> Calculando similaridade vetorial nos documentos...
-              </div>
-            )}
-
-            {!semanticSearching && semanticResults.length > 0 && (
-              <div className="mt-6 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  {semanticResults.length} Trechos Mais Relevantes Encontrados
-                </h4>
-                <div className="grid grid-cols-1 gap-3">
-                  {semanticResults.map((res, i) => (
-                    <div key={res.id || i} className="p-4 border border-indigo-100 rounded-xl bg-indigo-50/20 hover:bg-indigo-50/40 transition-colors">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700">
-                          <FileText className="w-3.5 h-3.5" /> {res.filename} (Pág. {res.page_number})
-                        </span>
-                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
-                          Similaridade: {(res.similarity * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-sans">{res.chunk_text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
