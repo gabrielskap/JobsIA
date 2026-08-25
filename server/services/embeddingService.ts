@@ -63,10 +63,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         contents: text,
       });
 
-      const rawRes = response as any;
-      const values = rawRes?.embedding?.values || rawRes?.embeddings?.[0]?.values || rawRes?.values;
-      if (Array.isArray(values) && values.length > 0) {
-        return values;
+      const embeddings = response?.embeddings;
+      if (Array.isArray(embeddings) && embeddings.length > 0 && Array.isArray(embeddings[0]?.values)) {
+        return embeddings[0].values as number[];
       }
     } catch (err) {
       console.warn('Falha na chamada da API de embeddings Gemini, usando gerador determinístico L2:', err);

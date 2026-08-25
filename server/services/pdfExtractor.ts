@@ -2,8 +2,6 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const pdfParseModule = require('pdf-parse');
-const parsePdf: (buffer: Buffer, options?: any) => Promise<any> =
-  typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
 
 export interface ExtractedPdf {
   text: string;
@@ -22,13 +20,51 @@ export interface DocumentChunk {
  * Extrai texto e informações estruturadas de um buffer de arquivo PDF.
  */
 export async function extractTextFromPdfBuffer(buffer: Buffer): Promise<ExtractedPdf> {
-  const data = await parsePdf(buffer);
-  const cleanText = data.text ? data.text.replace(/\r\n/g, '\n').trim() : '';
+  let rawText = '';
+  let totalPages = 1;
+  let info: Record<string, any> = {};
+
+  try {
+    // 1. Tenta API moderna do pdf-parse (v2 com classe PDFParse)
+    const PDFParseClass = pdfParseModule.PDFParse || (typeof pdfParseModule === 'function' && pdfParseModule.prototype?.getText ? pdfParseModule : null);
+    if (PDFParseClass) {
+      const parser = new PDFParseClass({ data: buffer });
+      const textResult = await parser.getText();
+      const infoResult = await parser.getInfo();
+      
+      if (typeof textResult === 'string') {
+        rawText = textResult;
+      } else if (textResult && typeof textResult.text === 'string') {
+        rawText = textResult.text;
+        if (typeof textResult.total === 'number') {
+          totalPages = textResult.total;
+        }
+      }
+
+      if (infoResult && typeof infoResult === 'object') {
+        info = infoResult.info || infoResult;
+        if (typeof infoResult.total === 'number' && totalPages === 1) {
+          totalPages = infoResult.total;
+        }
+      }
+    } else if (typeof pdfParseModule === 'function') {
+      // 2. Fallback para API legado clássico (v1)
+      const data = await pdfParseModule(buffer);
+      rawText = data?.text || '';
+      totalPages = data?.numpages || 1;
+      info = data?.info || {};
+    }
+  } catch (err) {
+    console.error('Erro durante extração do PDF com pdf-parse:', err);
+    throw new Error('Falha ao processar a estrutura interna do arquivo PDF.');
+  }
+
+  const cleanText = rawText ? rawText.replace(/\r\n/g, '\n').trim() : '';
 
   return {
     text: cleanText,
-    total_pages: data.numpages || 1,
-    info: data.info || {},
+    total_pages: Math.max(1, totalPages),
+    info,
   };
 }
 
