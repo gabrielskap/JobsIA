@@ -655,7 +655,7 @@ export const pdfService = {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(100, 116, 139);
-        doc.text(normalizePdfText('Tecnologia e Informação para a Previdência'), margin, 16);
+        doc.text(normalizePdfText(''), margin, 16);
       }
 
       const effectiveHeaderTitleX = logoDrawn ? headerTitleX : margin + 55;
