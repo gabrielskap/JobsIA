@@ -1,4 +1,9 @@
-import pdfParse from 'pdf-parse';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pdfParseModule = require('pdf-parse');
+const parsePdf: (buffer: Buffer, options?: any) => Promise<any> =
+  typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
 
 export interface ExtractedPdf {
   text: string;
@@ -17,7 +22,7 @@ export interface DocumentChunk {
  * Extrai texto e informações estruturadas de um buffer de arquivo PDF.
  */
 export async function extractTextFromPdfBuffer(buffer: Buffer): Promise<ExtractedPdf> {
-  const data = await pdfParse(buffer);
+  const data = await parsePdf(buffer);
   const cleanText = data.text ? data.text.replace(/\r\n/g, '\n').trim() : '';
 
   return {

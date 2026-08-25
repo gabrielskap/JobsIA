@@ -749,7 +749,7 @@ function CatalogPdfUploadModal({
   const [step, setStep] = useState<'IDLE' | 'EXTRACTING' | 'VECTORIZING' | 'SAVING'>('IDLE');
   const [error, setError] = useState<string | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (selected) {
       if (!selected.name.toLowerCase().endsWith('.pdf')) {

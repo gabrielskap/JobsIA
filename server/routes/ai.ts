@@ -162,6 +162,7 @@ export async function buildConsolidatedPrompt(): Promise<{ prompt: string; promp
     dictionaryResult,
     catalogResult,
     applicationRulesResult,
+    catalogDocumentsResult,
   ] = await Promise.all([
     pool.query<{ id: string; content: string }>(
       `SELECT id, content FROM "JobsIA_system_prompts"

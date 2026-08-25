@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { pool } from '../db';
 import { requireAuth, requireRole, logAudit, type AuthRequest } from '../middleware/auth';
 import { aiCache } from './ai';
+import { extractTextFromPdfBuffer, chunkDocumentText } from '../services/pdfExtractor';
+import { generateEmbedding, cosineSimilarity, extractCatalogCandidatesFromText } from '../services/embeddingService';
 
 const router = Router();
 router.use(requireAuth);
@@ -247,9 +250,22 @@ router.post('/application-rules/import', requireRole('ADMIN'), async (req: AuthR
         ]
       );
     }
-import multer from 'multer';
-import { extractTextFromPdfBuffer, chunkDocumentText } from '../services/pdfExtractor';
-import { generateEmbedding, cosineSimilarity, extractCatalogCandidatesFromText } from '../services/embeddingService';
+    await client.query('COMMIT');
+    aiCache.clear();
+    await logAudit(req.userId, 'IMPORT_APPLICATION_VALIDATION_RULES', { count: rules.length }, req.ip);
+    res.status(201).json({ imported: rules.length });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    if (error?.code === '42P01') {
+      res.status(503).json({ message: 'A migração de regras de Application ainda não foi aplicada neste ambiente.' });
+      return;
+    }
+    console.error('checklistCatalog.applicationRules.import:', error);
+    res.status(500).json({ message: 'Erro ao importar regras de Application.' });
+  } finally {
+    client.release();
+  }
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),

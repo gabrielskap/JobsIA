@@ -63,8 +63,10 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         contents: text,
       });
 
-      if (response && response.embedding && Array.isArray(response.embedding.values)) {
-        return response.embedding.values;
+      const rawRes = response as any;
+      const values = rawRes?.embedding?.values || rawRes?.embeddings?.[0]?.values || rawRes?.values;
+      if (Array.isArray(values) && values.length > 0) {
+        return values;
       }
     } catch (err) {
       console.warn('Falha na chamada da API de embeddings Gemini, usando gerador determinístico L2:', err);
@@ -120,7 +122,7 @@ export function extractCatalogCandidatesFromText(text: string): CatalogCandidate
     if (!trimmed) continue;
 
     // Padrões do tipo: [GENERICO] GEN-001: Nome do Genérico ou JOB TIPO 3 - Descrição
-    const genericMatch = trimmed.match(/(?:GEN[EÉ]RICO|GENERIC|JOB\s*TIPO\s*\d+)\s*[-:]?\s*([A-Z0-9_-]+)?\s*[-:—]?\s*(.+)/i);
+    const genericMatch = trimmed.match(/^\s*(?:\[GEN[EÉ]RICO\]|GEN[EÉ]RICO\b|\[GENERIC\]|GENERIC\b|\[JOB\s*TIPO\s*\d+\]|JOB\s*TIPO\s*\d+\b)\s*[-:]?\s*([A-Z0-9_-]+)?\s*[-:—]?\s*(.+)/i);
     if (genericMatch) {
       const rawCode = (genericMatch[1] || `GEN-${candidates.length + 1}`).toUpperCase();
       const code = rawCode.startsWith('GEN') ? rawCode : `GEN-${rawCode}`;
@@ -135,10 +137,11 @@ export function extractCatalogCandidatesFromText(text: string): CatalogCandidate
           description: trimmed,
         });
       }
+      continue;
     }
 
     // Padrões do tipo: [PONTE] PONTE-001: Nome da Ponte ou BRIDGE
-    const bridgeMatch = trimmed.match(/(?:PONTE|BRIDGE)\s*[-:]?\s*([A-Z0-9_-]+)?\s*[-:—]?\s*(.+)/i);
+    const bridgeMatch = trimmed.match(/^\s*(?:\[PONTE\]|PONTE\b|\[BRIDGE\]|BRIDGE\b)\s*[-:]?\s*([A-Z0-9_-]+)?\s*[-:—]?\s*(.+)/i);
     if (bridgeMatch) {
       const rawCode = (bridgeMatch[1] || `BRIDGE-${candidates.length + 1}`).toUpperCase();
       const code = rawCode.startsWith('PONTE') || rawCode.startsWith('BRIDGE') ? rawCode : `BRIDGE-${rawCode}`;
